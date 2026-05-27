@@ -724,6 +724,8 @@ const CATEGORY_GST = {
 const GST_TEXTILE_THRESHOLD = 2500;
 
 function getGSTRate(cat, netAmtPerUnit) {
+  // 0. GST EXEMPT customer? No GST on anything.
+  if (typeof window !== 'undefined' && window.GST_EXEMPT === true) return 0;
   // 1. Fixed category? Use its rate.
   if (cat in CATEGORY_GST) return CATEGORY_GST[cat];
   // 2. Textile/other category - depends on per-piece net price.
@@ -987,22 +989,42 @@ function _doLookup(gst, resEl) {
     document.getElementById('f-phone').value = customer.p || '';
     document.getElementById('f-city').value = customer.c || '';
     document.getElementById('f-state').value = customer.s || '';
-    // Auto-fill discount, GST rate, payment terms
+    // Auto-fill discount
     if (customer.d) document.getElementById('f-discount').value = customer.d;
-    if (customer.pt && customer.pt !== '0') {
+
+    // Auto-fill payment terms — supports both numbers (5, 15, 30) and text ("Net 30 Days")
+    if (customer.pt) {
       const sel = document.getElementById('f-payment');
+      const ptRaw = String(customer.pt).trim();
+      let target = '';
+      const ptNum = parseInt(ptRaw, 10);
+      if (!isNaN(ptNum) && ptRaw === String(ptNum)) {
+        // Numeric — map 0 to Advance, others to Net X Days
+        target = ptNum === 0 ? 'advance' : ('net ' + ptNum + ' days');
+      } else {
+        target = ptRaw.toLowerCase();
+      }
       for (let i=0; i<sel.options.length; i++) {
-        if (sel.options[i].value.toLowerCase().includes(customer.pt.toLowerCase())) {
+        if (sel.options[i].value.toLowerCase().includes(target)) {
           sel.selectedIndex = i; break;
         }
       }
       calcDueDate();
     }
+
+    // GST EXEMPT flag — apply to global so PO/confirm logic uses it
+    window.GST_EXEMPT = customer.ne === 1;
+
     resEl.className='gst-result show';
-    resEl.innerHTML = '<div class="gr-name"><span class="gr-tick">v</span>'+customer.n+'</div>' +
+    var exemptBadge = customer.ne === 1
+      ? '<span style="display:inline-block;background:#B03A2E;color:#fff;padding:2px 8px;border-radius:3px;font-size:0.6rem;letter-spacing:0.1em;margin-left:8px">GST EXEMPT</span>'
+      : '';
+    resEl.innerHTML = '<div class="gr-name"><span class="gr-tick">v</span>'+customer.n + exemptBadge + '</div>' +
       '<div class="gr-addr">'+cleanAddr+(customer.c ? ', '+customer.c : '')+(customer.s ? ', '+customer.s : '')+'</div>' +
       '<div class="gr-gst">GSTIN: '+gst+(customer.p ? ' . 📞 '+customer.p : '')+(customer.d ? ' . Disc: '+customer.d+'%' : '')+(customer.cp ? ' . 👤 '+customer.cp : '')+'</div>';
   } else {
+    // Customer not found — default to normal GST
+    window.GST_EXEMPT = false;
     // Try to validate GSTIN format and extract state from prefix
     const stateCode = gst.substring(0,2);
     const stateName = GST_STATE_CODES[stateCode] || '';
@@ -1152,18 +1174,6 @@ function generatePO() {
         ${remarks !== '-' ? `<span class="pb-l">Remarks</span><span class="pb-v">${remarks}</span>` : ''}
       </div>
     </div>
-    <div class="po-sec">
-      <div class="po-sec-t">Terms &amp; Conditions</div>
-      <div class="po-terms-txt" style="padding:0">
-        1. Goods once sold will not be taken back without prior written approval from The Tie Hub.<br>
-        2. Payment as per agreed terms: <strong>${payment}</strong>${dueDate ? ' - due by <strong>'+dueDate+'</strong>' : ''}. Delayed payments attract 2% interest per month.<br>
-        3. Delivery within <strong>${delivery}</strong> from order confirmation &amp; payment clearance.<br>
-        4. Any shortages or damage claims must be reported within 48 hours of delivery.<br>
-        5. Goods remain property of The Tie Hub until full payment is received.<br>
-        6. All disputes are subject to Mumbai jurisdiction only.<br>
-        7. E. &amp; O.E. - This is a computer-generated proforma order and requires confirmation.
-      </div>
-    </div>
     <div class="po-sec" style="padding-bottom:0.5rem">
       <div class="po-sec-t">Order Items . ${totalQty} pieces . ${keys.length} SKUs</div>
       <table class="po-tbl">
@@ -1182,6 +1192,18 @@ function generatePO() {
       ${discPct > 0 ? `<div class="pt-row"><span class="pt-lbl">Discount (${discPct}%)</span><span style="color:var(--red)">- Rs ${discAmt.toLocaleString('en-IN')}</span></div>` : ''}
       <div class="pt-row"><span class="pt-lbl">GST (per category)</span><span style="color:var(--green)">+ Rs ${gstAmt.toLocaleString('en-IN')}</span></div>
       <div class="pt-grand"><span>Grand Total${dueDate ? ' (Due '+dueDate+')' : ''}</span><span>Rs ${grandTotal.toLocaleString('en-IN')}</span></div>
+    </div>
+    <div class="po-sec">
+      <div class="po-sec-t">Terms &amp; Conditions</div>
+      <div class="po-terms-txt" style="padding:0">
+        1. Goods once sold will not be taken back without prior written approval from The Tie Hub.<br>
+        2. Payment as per agreed terms: <strong>${payment}</strong>${dueDate ? ' - due by <strong>'+dueDate+'</strong>' : ''}. Delayed payments attract 2% interest per month.<br>
+        3. Delivery within <strong>${delivery}</strong> from order confirmation &amp; payment clearance.<br>
+        4. Any shortages or damage claims must be reported within 48 hours of delivery.<br>
+        5. Goods remain property of The Tie Hub until full payment is received.<br>
+        6. All disputes are subject to Mumbai jurisdiction only.<br>
+        7. E. &amp; O.E. - This is a computer-generated proforma order and requires confirmation.
+      </div>
     </div>
     <div class="po-sign">
       <div class="sign-box"><div class="sign-line">Authorised Signatory<br><strong>The Tie Hub</strong><br><span style="font-size:0.7em;opacity:0.7">Big Five Inc. . GSTIN: 27AYNPK2735R1ZM</span></div></div>
@@ -1356,7 +1378,13 @@ function showOrderConfirmation() {
     discRow.style.display = 'flex';
     document.getElementById('confirm-disc').textContent = '- Rs ' + discAmt.toLocaleString('en-IN');
   } else { discRow.style.display = 'none'; }
-  document.getElementById('confirm-gst').textContent = '+ Rs ' + gstAmt.toLocaleString('en-IN');
+  if (window.GST_EXEMPT === true) {
+    document.getElementById('confirm-gst').textContent = 'EXEMPT (Rs 0)';
+    document.getElementById('confirm-gst').style.color = '#B03A2E';
+  } else {
+    document.getElementById('confirm-gst').textContent = '+ Rs ' + gstAmt.toLocaleString('en-IN');
+    document.getElementById('confirm-gst').style.color = '';
+  }
   document.getElementById('confirm-grand').textContent = 'Rs ' + grandTotal.toLocaleString('en-IN');
   document.getElementById('confirm-summary-line').textContent = totalQty + ' pcs - ' + keys.length + ' SKUs';
 
