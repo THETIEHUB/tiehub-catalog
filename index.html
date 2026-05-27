@@ -785,6 +785,12 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <label class="fl">Order Remarks</label>
         <input class="fi" id="f-remarks" placeholder="Any special instructions...">
 
+        <!-- Honeypot field — hidden from real users, bots auto-fill it -->
+        <div style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none" aria-hidden="true">
+          <label>Leave this empty</label>
+          <input type="text" id="hp-field" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
         <button class="gen-btn" onclick="showOrderConfirmation()">Review &amp; Confirm Order →</button>
       </div>
     </div>
@@ -1694,6 +1700,18 @@ function closeConfirm() { document.getElementById('confirm-over').classList.remo
 // PASTE YOUR WEB APP URL BELOW (the one ending in /exec from Deploy step)
 // Example: 'https://script.google.com/macros/s/AKfy.../exec'
 var BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwE5r4a-EkfU6yvJqJn6ma3bKn9IycXVTg9HFwXdZMWhSscCLmOmvrRkFfQT4Tqz0lWEA/exec';
+var BACKEND_TOKEN = 'TTH-2026-Mumbai-K9pQ7xR2vN5wL8mF';
+
+// Simple client ID (random per browser, used for per-client rate limiting)
+function getClientId() {
+  var id = '';
+  try { id = localStorage.getItem('_tth_cid'); } catch(e) {}
+  if (!id) {
+    id = 'cid_' + Math.random().toString(36).slice(2, 14) + Date.now().toString(36);
+    try { localStorage.setItem('_tth_cid', id); } catch(e) {}
+  }
+  return id;
+}
 
 function confirmAndGeneratePO() {
   closeConfirm();
@@ -1764,7 +1782,10 @@ function submitOrderToBackend() {
     totals: {
       subtotal: subtotal, discAmt: discAmt, gstAmt: gstAmt,
       grandTotal: grandTotal, totalQty: totalQty
-    }
+    },
+    _t: BACKEND_TOKEN,
+    _cid: getClientId(),
+    _hp: document.getElementById('hp-field') ? document.getElementById('hp-field').value : ''
   };
 
   // Apps Script web apps need text/plain to avoid a CORS preflight
@@ -1829,8 +1850,8 @@ function loadDataFromBackend() {
 
   // Load products and customers in parallel
   Promise.all([
-    fetch(BACKEND_URL + '?action=products').then(function(r){ return r.json(); }),
-    fetch(BACKEND_URL + '?action=customers').then(function(r){ return r.json(); })
+    fetch(BACKEND_URL + '?action=products&t=' + encodeURIComponent(BACKEND_TOKEN) + '&_cid=' + encodeURIComponent(getClientId())).then(function(r){ return r.json(); }),
+    fetch(BACKEND_URL + '?action=customers&t=' + encodeURIComponent(BACKEND_TOKEN) + '&_cid=' + encodeURIComponent(getClientId())).then(function(r){ return r.json(); })
   ]).then(function(results) {
     var products = results[0] || [];
     var customers = results[1] || {};
