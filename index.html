@@ -907,6 +907,13 @@ function showCatalog(navKey) {
   buildFilterSidebar();
   renderProducts();
   window.scrollTo(0,0);
+
+  // Auto-detect colors in background, then refresh the color filter
+  var cats = getCatsForNav(activeCat);
+  var inCat = cats ? PRODUCTS.filter(function(p){ return cats.includes(p.cat); }) : PRODUCTS;
+  analyzeColorsForCategory(inCat, function() {
+    buildFilterSidebar();  // re-render now that colors are known
+  });
 }
 
 function setNavActive(key) {
@@ -924,44 +931,126 @@ function getCatsForNav(navKey) {
 }
 
 // ===== AUTO-DETECT FILTER ATTRIBUTES =====
-// Maps category names to Material & Style attributes
-const CATEGORY_ATTRS = {
-  // Material mapping
-  material: {
-    'Cufflinks':'Metal', 'Metal Lapel Pin':'Metal', 'Lapel Pin':'Metal',
-    'Tie Pin':'Metal', 'Button Case':'Metal', 'Buttons':'Metal',
-    'Magnetic Metal Pocket Brooch':'Metal', 'Pocket Watch':'Metal', 'Tuxedo Button':'Metal',
-    'Boutonniere':'Metal',
-    'Neckties':'Silk', 'Bow Ties':'Silk', 'Pocket Squares':'Silk',
-    'Cravats':'Silk', 'Scarves':'Silk', 'Combo':'Silk',
-    'PU Belts':'PU', 'Belts':'PU',
-    'Polos':'Cotton', 'TShirts':'Cotton', 'Caps':'Cotton', 'Bright Socks':'Cotton',
-    'Bags':'Synthetic', 'PACKING MATERIAL':'Synthetic',
-    'Pen Stand':'Metal',
-    'Mask':'Fabric', 'Shirt Tucker':'Other'
-  },
-  // Style/Use mapping
-  style: {
-    'Cufflinks':'Formal', 'Metal Lapel Pin':'Formal', 'Lapel Pin':'Formal',
-    'Tie Pin':'Formal', 'Button Case':'Formal', 'Buttons':'Formal',
-    'Magnetic Metal Pocket Brooch':'Formal', 'Pocket Watch':'Formal', 'Tuxedo Button':'Formal',
-    'Boutonniere':'Wedding',
-    'Neckties':'Formal', 'Bow Ties':'Wedding', 'Pocket Squares':'Formal',
-    'Cravats':'Wedding', 'Scarves':'Casual',
-    'PU Belts':'Casual', 'Belts':'Casual',
-    'Polos':'Casual', 'TShirts':'Casual', 'Caps':'Casual', 'Bright Socks':'Casual',
-    'Combo':'Gifting', 'Bags':'Casual', 'PACKING MATERIAL':'Other',
-    'Pen Stand':'Formal', 'Mask':'Casual', 'Shirt Tucker':'Formal'
-  }
-};
+// Keyword-based detection — works regardless of exact category spelling,
+// singular/plural, or capitalisation. Matches if the category CONTAINS the keyword.
+const MATERIAL_RULES = [
+  // [keywords that appear in category name, material label]
+  [['cufflink','lapel','tie pin','tiepin','button','brooch','pocket watch','tuxedo','pen stand','boutonniere','cuff'], 'Metal'],
+  [['necktie','tie','bow','pocket square','cravat','scarf','scarve','combo','ascot'], 'Silk'],
+  [['pu belt','belt','pu'], 'PU'],
+  [['polo','tshirt','t-shirt','t shirt','cap','sock','cotton'], 'Cotton'],
+  [['bag','packing','mask'], 'Synthetic'],
+];
+const STYLE_RULES = [
+  [['cufflink','lapel','tie pin','tiepin','button','brooch','pocket watch','tuxedo','pen stand','cuff','pocket square','necktie','tie'], 'Formal'],
+  [['bow','cravat','boutonniere','ascot'], 'Wedding'],
+  [['polo','tshirt','t-shirt','t shirt','cap','sock','belt','pu','scarf','scarve','bag','mask'], 'Casual'],
+  [['combo','gift'], 'Gifting'],
+];
 
-function getMaterial(p) { return CATEGORY_ATTRS.material[p.cat] || 'Other'; }
-function getStyle(p) { return CATEGORY_ATTRS.style[p.cat] || 'Other'; }
+function matchRule(cat, rules) {
+  var c = (cat || '').toLowerCase();
+  for (var i = 0; i < rules.length; i++) {
+    var keywords = rules[i][0];
+    for (var k = 0; k < keywords.length; k++) {
+      if (c.indexOf(keywords[k]) !== -1) return rules[i][1];
+    }
+  }
+  return 'Other';
+}
+
+function getMaterial(p) { return matchRule(p.cat, MATERIAL_RULES); }
+function getStyle(p) { return matchRule(p.cat, STYLE_RULES); }
+
+// ===== AUTO COLOR DETECTION FROM IMAGES =====
+// Detects dominant product color by sampling image pixels (ignoring light background).
+// Results cached so each image is analysed only once.
+var COLOR_CACHE = {};  // sku -> color name
+
+// Named color reference points (RGB)
+var COLOR_PALETTE = [
+  ['Black',   [25,25,25]],
+  ['White',   [240,240,240]],
+  ['Grey',    [128,128,128]],
+  ['Navy',    [30,40,90]],
+  ['Blue',    [40,90,190]],
+  ['Sky Blue',[120,170,220]],
+  ['Red',     [190,40,40]],
+  ['Maroon',  [110,30,40]],
+  ['Pink',    [220,130,160]],
+  ['Orange',  [220,120,40]],
+  ['Yellow',  [225,200,70]],
+  ['Gold',    [180,150,70]],
+  ['Green',   [50,130,60]],
+  ['Teal',    [40,130,130]],
+  ['Purple',  [110,60,150]],
+  ['Brown',   [110,75,45]],
+  ['Beige',   [210,190,150]],
+];
+
+function nearestColorName(r, g, b) {
+  var best = 'Multi', bestDist = Infinity;
+  for (var i = 0; i < COLOR_PALETTE.length; i++) {
+    var c = COLOR_PALETTE[i][1];
+    var d = (r-c[0])*(r-c[0]) + (g-c[1])*(g-c[1]) + (b-c[2])*(b-c[2]);
+    if (d < bestDist) { bestDist = d; best = COLOR_PALETTE[i][0]; }
+  }
+  return best;
+}
+
+function detectColorFromImage(imgUrl, sku, callback) {
+  if (COLOR_CACHE[sku]) { callback(COLOR_CACHE[sku]); return; }
+  if (!imgUrl) { callback(null); return; }
+  var img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function() {
+    try {
+      var size = 40; // downscale for speed
+      var canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, size, size);
+      var data = ctx.getImageData(0, 0, size, size).data;
+      var rSum=0, gSum=0, bSum=0, count=0;
+      for (var i = 0; i < data.length; i += 4) {
+        var r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+        if (a < 200) continue;                       // skip transparent
+        var mx = Math.max(r,g,b), mn = Math.min(r,g,b);
+        if (mx > 225 && mn > 225) continue;          // skip white/near-white bg
+        if (mx < 28 && mn < 28) continue;            // skip near-black noise/shadow (keep true blacks via majority later)
+        rSum += r; gSum += g; bSum += b; count++;
+      }
+      if (count < 20) { COLOR_CACHE[sku] = null; callback(null); return; }
+      var name = nearestColorName(Math.round(rSum/count), Math.round(gSum/count), Math.round(bSum/count));
+      COLOR_CACHE[sku] = name;
+      callback(name);
+    } catch(e) {
+      COLOR_CACHE[sku] = null; callback(null);
+    }
+  };
+  img.onerror = function() { COLOR_CACHE[sku] = null; callback(null); };
+  img.src = imgUrl;
+}
+
+// Analyse colors for all products in the current category (async, then rebuild filter)
+function analyzeColorsForCategory(products, done) {
+  var pending = 0, analyzed = 0;
+  var toScan = products.filter(function(p){ return p.img && !COLOR_CACHE[p.sku]; }).slice(0, 200); // cap per pass
+  if (!toScan.length) { done(); return; }
+  toScan.forEach(function(p) {
+    pending++;
+    detectColorFromImage(p.img, p.sku, function(color) {
+      if (color) p.color = color;
+      analyzed++;
+      if (analyzed >= toScan.length) done();
+    });
+  });
+}
 
 // Raw material / made-to-order helpers
-function readyStock(p) { return Number(p.stock) || 0; }
-function rawStock(p) { return Number(p.raw) || 0; }            // made-to-order capacity
-function totalAvail(p) { return readyStock(p) + rawStock(p); } // total a customer can order
+function readyStock(p) { return Math.max(0, Math.floor(Number(p.stock) || 0)); }
+function rawStock(p) { return Math.max(0, Math.floor(Number(p.raw) || 0)); }
+function totalAvail(p) { return readyStock(p) + rawStock(p); }
 function getPriceRange(p) {
   if (p.mrp < 500) return '0-500';
   if (p.mrp < 1000) return '500-1000';
@@ -1061,16 +1150,20 @@ function buildFilterSidebar() {
     patternGroup.style.display = 'none';
   }
 
-  // Show Color filter ONLY if sheet has color data
+  // Show Color filter — auto-detected from images
   const colorGroup = document.getElementById('color-filter-group');
+  // Remember which colors were checked before re-render
+  var checkedColors = Array.from(document.querySelectorAll('input[name="f-color"]:checked')).map(function(i){return i.value;});
   if (Object.keys(colorCounts).length > 0) {
     colorGroup.style.display = 'block';
     document.getElementById('filter-colors').innerHTML =
       Object.entries(colorCounts).sort((a,b)=>b[1]-a[1])
-        .map(([col,c]) => `<label class="fopt"><input type="checkbox" name="f-color" value="${col}" onchange="renderProducts()"> ${col}<span class="fopt-count">${c}</span></label>`)
+        .map(([col,c]) => `<label class="fopt"><input type="checkbox" name="f-color" value="${col}" ${checkedColors.indexOf(col)!==-1?'checked':''} onchange="renderProducts()"> ${col}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
-    colorGroup.style.display = 'none';
+    // No colors detected yet — show subtle detecting hint
+    colorGroup.style.display = 'block';
+    document.getElementById('filter-colors').innerHTML = '<div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted2);font-style:italic;padding:0.3rem 0">Detecting colors from images…</div>';
   }
 }
 
@@ -1153,10 +1246,10 @@ function cardHTML(p) {
     : qty === 0 ? `<button class="add-btn" onclick="addItem('${p.sku}')">+ Add</button>`
     : `<div class="qty-ctrl"><button class="q-btn" onclick="changeQty('${p.sku}',-1)">-</button><span class="q-num">${qty}</span><button class="q-btn" onclick="changeQty('${p.sku}',1)">+</button></div>`;
 
-  // Stock display: show "10 ready + 100 made-to-order (7 days)" when raw exists
+  // Stock display: clean one-line. Made-to-order only shown when raw > 0
   let stockLine;
   if (raw > 0) {
-    stockLine = `<div class="pcard-stock"><span style="color:var(--green)">${ready} ready</span> + <span style="color:var(--gold)">${raw} made-to-order</span><span style="display:block;font-size:0.5rem;color:var(--muted2);margin-top:1px">Made-to-order ships in 7 days</span></div>`;
+    stockLine = `<div class="pcard-stock"><span style="color:var(--green)">${ready} ready</span> + <span style="color:var(--gold)">${raw} made-to-order</span></div>`;
   } else {
     stockLine = `<div class="pcard-stock">${ready} in stock</div>`;
   }
