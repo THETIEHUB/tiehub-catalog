@@ -1316,7 +1316,7 @@ function exportCatalogPDF() {
     var stockTxt = raw > 0 ? (ready + ' ready + ' + raw + ' made-to-order') : (ready + ' in stock');
     var mtoBadge = raw > 0 ? '<span class="mto">Made-to-Order</span>' : '';
     var imgBlock = p.img
-      ? '<div class="pimg"><img src="'+p.img+'" crossorigin="anonymous" onerror="this.parentNode.innerHTML=\'<div class=&quot;noimg&quot;>&#9672;</div>\'"></div>'
+      ? '<div class="pimg"><img src="'+p.img+'" onerror="this.parentNode.innerHTML=\'<div class=&quot;noimg&quot;>&#9672;</div>\'"></div>'
       : '<div class="pimg"><div class="noimg">&#9672;</div></div>';
     return '<div class="pcard">'
       + imgBlock
