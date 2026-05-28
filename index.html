@@ -1413,16 +1413,38 @@ function lookupGST() {
   setTimeout(() => _doLookup(gst, resEl), 50);
 }
 
+// Fix garbled characters (mojibake) from bad UTF-8/Latin-1 encoding in sheet data
+function fixMojibake(str) {
+  if (!str) return str;
+  var s = String(str);
+  var map = {
+    'Ã¢â‚¬â€œ':'-', 'Ã¢â‚¬â€\u009d':'"', 'Ã¢â‚¬Å"':'"',
+    'Ã¢â‚¬â„¢':"'", 'Ã¢â‚¬Ëœ':"'", 'Ã¢â‚¬Â¦':'...',
+    'Ã¢â‚¬':'-', 'â‚¬':'-', 'â€"':'-', 'â€“':'-', 'â€™':"'",
+    'â€˜':"'", 'â€œ':'"', 'â€\u009d':'"', 'â€¦':'...',
+    'Ã©':'e', 'Ã¨':'e', 'Ã ':'a', 'Ã¼':'u', 'Ã±':'n',
+    'Â':'', '\u0080':'', '\u0093':'-', '\u0094':'-',
+    '\u0092':"'", '\u0091':"'", '\u0096':'-', '\u0097':'-',
+    '\u009d':'', '\u008d':''
+  };
+  for (var bad in map) {
+    s = s.split(bad).join(map[bad]);
+  }
+  // Remove any remaining non-printable / replacement chars
+  s = s.replace(/\uFFFD/g, '').replace(/[\u0080-\u009F]/g, '');
+  return s.trim();
+}
+
 function _doLookup(gst, resEl) {
   const customer = CUSTOMER_DB[gst];
   if (customer) {
     // Strip embedded phone number from address (phone appended at end in this CSV)
-    const cleanAddr = customer.a.replace(/\s*\d{10,12}\s*$/, '').trim();
+    const cleanAddr = fixMojibake(customer.a.replace(/\s*\d{10,12}\s*$/, '').trim());
     // Auto-fill form fields
-    document.getElementById('f-shop').value = customer.n || '';
+    document.getElementById('f-shop').value = fixMojibake(customer.n || '');
     document.getElementById('f-gst').value = gst;
     document.getElementById('f-addr').value = cleanAddr;
-    document.getElementById('f-name').value = customer.cp || '';
+    document.getElementById('f-name').value = fixMojibake(customer.cp || '');
     document.getElementById('f-phone').value = customer.p || '';
     document.getElementById('f-city').value = customer.c || '';
     document.getElementById('f-state').value = customer.s || '';
