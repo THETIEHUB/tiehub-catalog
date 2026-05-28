@@ -173,6 +173,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .badge{font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.18em;text-transform:uppercase;padding:3px 8px;font-weight:500}
 .b-low{background:rgba(139,111,31,0.92);color:#fff}
 .b-oos{background:rgba(139,46,42,0.92);color:#fff}
+.b-mto{background:rgba(58,107,58,0.92);color:#fff}
 .pcard-body{padding:0.9rem 1rem 1.1rem}
 .pcard-sku{font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.32em;text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:0.35rem}
 .pcard-cat{font-family:var(--f-display);font-size:1rem;color:var(--dark);font-weight:500;margin-bottom:0.7rem;line-height:1.3;letter-spacing:0.005em}
@@ -599,11 +600,20 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <option value="stock-desc">Stock ↓</option>
       <option value="sku">SKU A–Z</option>
     </select>
-    <span class="flbl">Stock:</span>
+    <span class="flbl">Min Stock:</span>
     <select class="fsel" id="stock-sel" onchange="renderProducts()">
-      <option value="all">All</option>
-      <option value="in">In Stock</option>
-      <option value="low">Low Stock ≤10</option>
+      <option value="all">Any Stock</option>
+      <option value="in">In Stock (1+)</option>
+      <option value="10">10+ pcs</option>
+      <option value="20">20+ pcs</option>
+      <option value="30">30+ pcs</option>
+      <option value="40">40+ pcs</option>
+      <option value="50">50+ pcs</option>
+      <option value="60">60+ pcs</option>
+      <option value="70">70+ pcs</option>
+      <option value="80">80+ pcs</option>
+      <option value="90">90+ pcs</option>
+      <option value="100">100+ pcs</option>
     </select>
     <span style="margin-left:auto;font-size:0.62rem;color:var(--muted);font-family:var(--f-ui);letter-spacing:0.15em" id="result-info"></span>
   </div>
@@ -947,6 +957,11 @@ const CATEGORY_ATTRS = {
 
 function getMaterial(p) { return CATEGORY_ATTRS.material[p.cat] || 'Other'; }
 function getStyle(p) { return CATEGORY_ATTRS.style[p.cat] || 'Other'; }
+
+// Raw material / made-to-order helpers
+function readyStock(p) { return Number(p.stock) || 0; }
+function rawStock(p) { return Number(p.raw) || 0; }            // made-to-order capacity
+function totalAvail(p) { return readyStock(p) + rawStock(p); } // total a customer can order
 function getPriceRange(p) {
   if (p.mrp < 500) return '0-500';
   if (p.mrp < 1000) return '500-1000';
@@ -961,10 +976,14 @@ function getFiltered() {
     const q = searchQ.toLowerCase();
     list = list.filter(p => p.sku.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
   }
-  // Stock filter
+  // Stock filter — uses TOTAL available (ready + made-to-order)
   const sf = document.getElementById('stock-sel')?.value || 'all';
-  if (sf === 'in') list = list.filter(p => p.stock > 0);
-  if (sf === 'low') list = list.filter(p => p.stock > 0 && p.stock <= 10);
+  if (sf === 'in') {
+    list = list.filter(p => totalAvail(p) > 0);
+  } else if (sf !== 'all') {
+    const minQty = parseInt(sf, 10);
+    if (!isNaN(minQty)) list = list.filter(p => totalAvail(p) >= minQty);
+  }
 
   // Price range filter
   const pr = document.querySelector('input[name="f-price"]:checked')?.value || 'all';
@@ -1119,8 +1138,11 @@ function renderProducts() {
 
 function cardHTML(p) {
   const qty = cart[p.sku]||0;
-  const oos = p.stock === 0;
-  const low = p.stock > 0 && p.stock <= 10;
+  const ready = readyStock(p);
+  const raw = rawStock(p);
+  const total = ready + raw;
+  const oos = total === 0;
+  const low = ready > 0 && ready <= 10;
   const safeSku = p.sku.replace(/'/g, "\\'");
   const safeImg = p.img ? p.img.replace(/'/g, "\\'") : '';
   const imgTag = p.img
@@ -1130,17 +1152,28 @@ function cardHTML(p) {
   const action = oos ? `<span class="oos-lbl">Out of Stock</span>`
     : qty === 0 ? `<button class="add-btn" onclick="addItem('${p.sku}')">+ Add</button>`
     : `<div class="qty-ctrl"><button class="q-btn" onclick="changeQty('${p.sku}',-1)">-</button><span class="q-num">${qty}</span><button class="q-btn" onclick="changeQty('${p.sku}',1)">+</button></div>`;
+
+  // Stock display: show "10 ready + 100 made-to-order (7 days)" when raw exists
+  let stockLine;
+  if (raw > 0) {
+    stockLine = `<div class="pcard-stock"><span style="color:var(--green)">${ready} ready</span> + <span style="color:var(--gold)">${raw} made-to-order</span><span style="display:block;font-size:0.5rem;color:var(--muted2);margin-top:1px">Made-to-order ships in 7 days</span></div>`;
+  } else {
+    stockLine = `<div class="pcard-stock">${ready} in stock</div>`;
+  }
+
+  const mtoBadge = raw > 0 ? '<span class="badge b-mto">Made-to-Order</span>' : '';
+
   return `<div class="pcard" id="pc-${p.sku.replace(/[^a-z0-9]/gi,'-')}">
     <div class="pcard-img" ${p.img ? `onclick="openLightbox('${safeImg}','${safeSku}')"` : ''} title="${p.img ? 'Click to view full image' : ''}">
       ${imgTag}
       <div class="pcard-nophoto" ${phStyle}><span>◈</span><span style="font-size:0.55rem;letter-spacing:0.1em;text-transform:uppercase">${p.cat}</span></div>
-      <div class="badge-row">${low&&!oos?'<span class="badge b-low">Low Stock</span>':''}${oos?'<span class="badge b-oos">Out of Stock</span>':''}</div>
+      <div class="badge-row">${low&&!oos?'<span class="badge b-low">Low Stock</span>':''}${oos?'<span class="badge b-oos">Out of Stock</span>':''}${mtoBadge}</div>
       ${p.img ? '<div style="position:absolute;bottom:4px;right:5px;background:rgba(0,0,0,0.45);color:#fff;font-size:0.55rem;padding:2px 5px;pointer-events:none;border-radius:2px">🔍 View</div>' : ''}
     </div>
     <div class="pcard-body">
       <div class="pcard-sku">${p.sku}</div>
       <div class="pcard-cat">${p.cat}</div>
-      <div class="pcard-foot"><div><div class="pcard-price"><span class="pcard-price-cur">Rs</span>${p.mrp.toLocaleString('en-IN')}</div><div class="pcard-stock">${p.stock} in stock</div></div>${action}</div>
+      <div class="pcard-foot"><div><div class="pcard-price"><span class="pcard-price-cur">Rs</span>${p.mrp.toLocaleString('en-IN')}</div>${stockLine}</div>${action}</div>
     </div>
   </div>`;
 }
@@ -1189,7 +1222,15 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeLigh
 
 // ---- CART ----
 function addItem(sku) { cart[sku]=1; sync(); }
-function changeQty(sku,d) { cart[sku]=(cart[sku]||0)+d; if(cart[sku]<=0) delete cart[sku]; sync(); }
+function changeQty(sku,d) {
+  var p = PRODUCTS.find(x=>x.sku===sku);
+  var max = p ? totalAvail(p) : 9999;
+  var next = (cart[sku]||0)+d;
+  if (next > max) { next = max; }
+  cart[sku] = next;
+  if(cart[sku]<=0) delete cart[sku];
+  sync();
+}
 function removeItem(sku) { delete cart[sku]; sync(); }
 function clearCart() { cart = {}; sync(); }
 function saveCart() {
@@ -1605,10 +1646,14 @@ function showOrderConfirmation() {
   const remarks  = document.getElementById('f-remarks').value.trim();
 
   let subtotal = 0, totalQty = 0;
+  let hasMadeToOrder = false;
   const itemsData = [];
   keys.forEach(sku => {
     const p = PRODUCTS.find(x => x.sku === sku); if (!p) return;
     const qty = cart[sku];
+    const ready = readyStock(p);
+    const isMTO = qty > ready; // order exceeds ready stock → needs making
+    if (isMTO) hasMadeToOrder = true;
     const baseAmt = p.mrp * qty;
     const discOnItem = Math.round(baseAmt * discPct / 100);
     const afterDisc = baseAmt - discOnItem;
@@ -1617,7 +1662,7 @@ function showOrderConfirmation() {
     const gstOnItem = Math.round(afterDisc * skuGstPct / 100);
     const lineTotal = afterDisc + gstOnItem;
     subtotal += baseAmt; totalQty += qty;
-    itemsData.push({sku, cat: p.cat, qty, mrp: p.mrp, baseAmt, discOnItem, skuGstPct, gstOnItem, lineTotal});
+    itemsData.push({sku, cat: p.cat, qty, mrp: p.mrp, baseAmt, discOnItem, skuGstPct, gstOnItem, lineTotal, isMTO});
   });
   const discAmt   = Math.round(subtotal * discPct / 100);
   const afterDiscT = subtotal - discAmt;
@@ -1642,6 +1687,21 @@ function showOrderConfirmation() {
     warnEl.classList.add('show');
     warnEl.innerHTML = '! <strong>Missing details:</strong> ' + missing.join(' - ') + '. You can still confirm but these fields will show as "-".';
   } else { warnEl.classList.remove('show'); }
+
+  // Made-to-order dispatch note
+  var mtoEl = document.getElementById('confirm-mto-note');
+  if (!mtoEl) {
+    mtoEl = document.createElement('div');
+    mtoEl.id = 'confirm-mto-note';
+    mtoEl.style.cssText = 'margin:0.8rem 2rem;padding:0.7rem 1rem;background:#EDF3ED;border-left:3px solid var(--green);font-family:var(--f-ui);font-size:0.7rem;color:#2D4A2D;letter-spacing:0.02em;line-height:1.5';
+    warnEl.parentNode.insertBefore(mtoEl, warnEl.nextSibling);
+  }
+  if (hasMadeToOrder) {
+    mtoEl.style.display = 'block';
+    mtoEl.innerHTML = '<strong>Made-to-Order items in this order.</strong> Some quantities exceed ready stock and will be manufactured. Entire order will be dispatched together within <strong>7 working days</strong>.';
+  } else {
+    mtoEl.style.display = 'none';
+  }
 
   const cv = (v, f) => v || '<span class="cg-val missing">' + (f||'-') + '</span>';
   document.getElementById('confirm-customer').innerHTML =
