@@ -6,6 +6,7 @@
 <title>The Tie Hub — B2B Wholesale Catalog 2025</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -554,10 +555,9 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <input class="search-inp" id="search" placeholder="Search SKU, category..." oninput="onSearch()">
       <span class="search-icon">⌕</span>
     </div>
-    <button class="cam-btn" onclick="openCameraSearch()" title="Search by color from photo">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+    <button class="cam-btn" onclick="openQRScanner()" title="Scan QR / barcode of a product">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="14" y1="14" x2="14" y2="17"></line><line x1="17" y1="14" x2="20" y2="14"></line><line x1="14" y1="20" x2="17" y2="20"></line><line x1="20" y1="17" x2="20" y2="20"></line></svg>
     </button>
-    <input type="file" id="cam-input" accept="image/*" capture="environment" style="display:none" onchange="onCameraPick(event)">
     <button class="order-btn" onclick="togglePanel()">
       🛒 &nbsp;Order
       <span class="order-badge" id="cart-count">0</span>
@@ -661,6 +661,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <option value="100">100+ pcs</option>
     </select>
     <span style="margin-left:auto;font-size:0.62rem;color:var(--muted);font-family:var(--f-ui);letter-spacing:0.15em" id="result-info"></span>
+    <button class="export-pdf-btn" onclick="shareFilteredOnWhatsApp()" title="Share current view on WhatsApp" style="background:#25D366">📱 WhatsApp</button>
+    <button class="export-pdf-btn" onclick="openBulkImport()" title="Upload Excel file to bulk-add products">⬆ Bulk Order</button>
     <button class="export-pdf-btn" onclick="exportCatalogPDF()" title="Download current products as PDF">⬇ Export PDF</button>
   </div>
 
@@ -747,7 +749,13 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     </div>
 
     <div class="p-items" id="p-items">
-      <div class="empty-panel"><div class="ep-icon">◈</div><div style="font-size:0.75rem;letter-spacing:0.08em">No items added yet.<br>Browse &amp; add products.</div></div>
+      <div class="empty-panel">
+        <div class="ep-icon">◈</div>
+        <div style="font-size:0.75rem;letter-spacing:0.08em">No items added yet.<br>Browse &amp; add products.</div>
+        <div style="margin-top:1.5rem;padding-top:1.2rem;border-top:1px solid var(--border);font-family:var(--f-ui);font-size:0.6rem;color:var(--muted2);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.6rem">Bulk Order</div>
+        <button onclick="openBulkImport()" style="background:var(--dark);color:var(--cream);border:none;padding:0.6rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;margin-bottom:0.5rem;font-weight:500">⬆ Upload Excel File</button>
+        <div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted)"><a href="#" onclick="downloadBulkTemplate();return false;" style="color:var(--gold);text-decoration:none;border-bottom:1px solid var(--gold)">Download Template</a></div>
+      </div>
     </div>
     <div id="p-summary" style="display:none">
       <div class="p-summary">
@@ -1093,143 +1101,228 @@ function analyzeColorsForCategory(products, done) {
   });
 }
 
-// ===== CAMERA / COLOR SEARCH =====
-function openCameraSearch() {
-  document.getElementById('cm-over').classList.add('show');
-  // Trigger the hidden file input which on mobile opens camera/gallery picker
-  document.getElementById('cam-input').click();
+// ===== QR SCANNER (scan product tags) =====
+function openQRScanner() {
+  var modal = document.getElementById('qr-over');
+  if (modal) { modal.classList.add('show'); startQRScan(); return; }
+  // Modal not in HTML yet - just trigger file input as fallback
+  document.getElementById('qr-input').click();
 }
-function closeCameraSearch() {
-  document.getElementById('cm-over').classList.remove('show');
-  document.getElementById('cam-input').value = '';
+function closeQRScanner() {
+  var modal = document.getElementById('qr-over');
+  if (modal) modal.classList.remove('show');
+  stopQRScan();
 }
 
-function onCameraPick(event) {
+var _qrStream = null, _qrAnimating = false;
+function startQRScan() {
+  if (!('mediaDevices' in navigator)) {
+    document.getElementById('qr-msg').textContent = 'Camera not supported on this device. Use the upload button below.';
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream){
+    _qrStream = stream;
+    var v = document.getElementById('qr-video');
+    v.srcObject = stream;
+    v.play();
+    _qrAnimating = true;
+    tickQRScan();
+    document.getElementById('qr-msg').textContent = 'Point camera at a product QR code or barcode';
+  }).catch(function(err){
+    document.getElementById('qr-msg').textContent = 'Could not access camera. Try the upload button below.';
+  });
+}
+function stopQRScan() {
+  _qrAnimating = false;
+  if (_qrStream) {
+    _qrStream.getTracks().forEach(function(t){t.stop();});
+    _qrStream = null;
+  }
+}
+function tickQRScan() {
+  if (!_qrAnimating) return;
+  if (typeof jsQR === 'undefined') { setTimeout(tickQRScan, 600); return; }
+  var v = document.getElementById('qr-video');
+  if (v && v.readyState === v.HAVE_ENOUGH_DATA) {
+    var canvas = document.createElement('canvas');
+    canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+    try {
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code && code.data) { onQRDetected(code.data); return; }
+    } catch(e) {}
+  }
+  requestAnimationFrame(tickQRScan);
+}
+
+function onQRDetected(raw) {
+  stopQRScan();
+  // Try to find product by SKU (the QR code should contain the SKU)
+  var sku = String(raw).trim().toUpperCase();
+  var product = PRODUCTS.find(function(p){ return p.sku.toUpperCase() === sku; });
+  // Also try partial match in case URL is embedded
+  if (!product) {
+    var match = raw.match(/TTH[-_][A-Z0-9_-]+/i);
+    if (match) {
+      var s = match[0].toUpperCase();
+      product = PRODUCTS.find(function(p){ return p.sku.toUpperCase() === s; });
+    }
+  }
+  if (product) {
+    closeQRScanner();
+    // Open the product's category page and scroll to it
+    showCatalog(product.cat);
+    setTimeout(function(){
+      var card = document.getElementById('pc-' + product.sku.replace(/[^a-z0-9]/gi,'-'));
+      if (card) {
+        card.scrollIntoView({behavior:'smooth', block:'center'});
+        card.style.outline = '3px solid #8B6F1F';
+        setTimeout(function(){ card.style.outline = ''; }, 2500);
+      }
+      // Auto-add to cart
+      addItem(product.sku);
+    }, 400);
+  } else {
+    document.getElementById('qr-msg').textContent = 'SKU "' + sku.slice(0,30) + '" not found in catalog. Try again.';
+    setTimeout(startQRScan, 1800);
+  }
+}
+
+function onQRImagePick(event) {
   var file = event.target.files && event.target.files[0];
-  if (!file) { closeCameraSearch(); return; }
-  document.getElementById('cm-over').classList.add('show');
-  document.getElementById('cm-grid').innerHTML = '<div class="cm-loading">Analysing photo...</div>';
+  if (!file) return;
   var reader = new FileReader();
   reader.onload = function(e) {
-    var dataUrl = e.target.result;
-    // Show preview
-    var preview = document.getElementById('cm-preview');
-    preview.innerHTML = '<img src="' + dataUrl + '" alt="captured">';
-    // Extract dominant color from the photo
     var img = new Image();
     img.onload = function() {
-      var rgb = extractDominantColor(img);
-      if (!rgb) {
-        document.getElementById('cm-grid').innerHTML = '<div class="cm-empty">Could not detect a clear color. Try a clearer photo against a plain background.</div>';
+      if (typeof jsQR === 'undefined') {
+        alert('QR library still loading. Please try again in a moment.');
         return;
       }
-      var colorName = nearestColorName(rgb[0], rgb[1], rgb[2]);
-      var hex = '#' + rgb.map(function(v){return ('0'+v.toString(16)).slice(-2);}).join('').toUpperCase();
-      document.getElementById('cm-color-name').textContent = colorName;
-      document.getElementById('cm-color-rgb').textContent = hex + ' · RGB(' + rgb.join(', ') + ')';
-      document.getElementById('cm-swatch').style.background = hex;
-      // Find matching products
-      findColorMatches(rgb, colorName);
+      var canvas = document.createElement('canvas');
+      canvas.width = img.width; canvas.height = img.height;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      try {
+        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code && code.data) onQRDetected(code.data);
+        else document.getElementById('qr-msg').textContent = 'No QR code found in image. Try another photo.';
+      } catch(e) {
+        document.getElementById('qr-msg').textContent = 'Could not read this image.';
+      }
     };
-    img.src = dataUrl;
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
+  event.target.value = '';
 }
 
-// Extract the dominant non-background color from a user's photo
-function extractDominantColor(img) {
-  try {
-    var size = 80;
-    var canvas = document.createElement('canvas');
-    canvas.width = size; canvas.height = size;
-    var ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, size, size);
-    var data = ctx.getImageData(0, 0, size, size).data;
-    // Bucket colors into 24-bit quantised bins to find the dominant one
-    var buckets = {};
-    var dominant = null, maxCount = 0;
-    for (var i = 0; i < data.length; i += 4) {
-      var r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
-      if (a < 200) continue;
-      var mx = Math.max(r,g,b), mn = Math.min(r,g,b);
-      // skip near-white background
-      if (mx > 230 && mn > 220) continue;
-      // skip near-black noise
-      if (mx < 25) continue;
-      // skip very low saturation greys unless image is mostly grey
-      // (we'll let it through and filter later if needed)
-      // Quantise to 32-step buckets
-      var key = (r>>5)+'_'+(g>>5)+'_'+(b>>5);
-      buckets[key] = buckets[key] || {r:0,g:0,b:0,n:0};
-      buckets[key].r += r; buckets[key].g += g; buckets[key].b += b; buckets[key].n++;
-      if (buckets[key].n > maxCount) {
-        maxCount = buckets[key].n;
-        dominant = buckets[key];
-      }
+
+// ===== BULK EXCEL/CSV IMPORT =====
+function openBulkImport() {
+  document.getElementById('bulk-input').click();
+}
+
+function onBulkFilePicked(event) {
+  var file = event.target.files && event.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, {type: 'array'});
+      var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+      processBulkRows(rows, file.name);
+    } catch(err) {
+      alert('Could not read file: ' + err.message + '\n\nFormat needed: two columns - SKU and Quantity');
     }
-    if (!dominant) return null;
-    return [
-      Math.round(dominant.r/dominant.n),
-      Math.round(dominant.g/dominant.n),
-      Math.round(dominant.b/dominant.n)
-    ];
-  } catch(e) {
-    return null;
-  }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
 }
 
-function colorDistance(a, b) {
-  return Math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]) + (a[2]-b[2])*(a[2]-b[2]));
+function processBulkRows(rows, fileName) {
+  if (!rows || rows.length < 1) { alert('File is empty.'); return; }
+  // Detect header row vs data row
+  var startRow = 0;
+  if (rows[0] && rows[0][0]) {
+    var firstCell = String(rows[0][0]).trim().toLowerCase();
+    if (firstCell === 'sku' || firstCell.indexOf('sku') !== -1 || firstCell === 'product') startRow = 1;
+  }
+  var added = 0, notFound = [], outOfStock = [];
+  for (var i = startRow; i < rows.length; i++) {
+    var row = rows[i];
+    if (!row || !row[0]) continue;
+    var sku = String(row[0]).trim().toUpperCase();
+    var qty = parseInt(row[1], 10) || 1;
+    if (qty < 1) continue;
+    var product = PRODUCTS.find(function(p){ return p.sku.toUpperCase() === sku; });
+    if (!product) { notFound.push(sku); continue; }
+    var max = totalAvail(product);
+    if (max === 0) { outOfStock.push(sku); continue; }
+    if (qty > max) qty = max;
+    cart[product.sku] = (cart[product.sku] || 0) + qty;
+    added++;
+  }
+  sync();
+  // Build summary
+  var msg = added + ' product(s) added to your cart from "' + fileName + '".';
+  if (notFound.length) msg += '\n\n' + notFound.length + ' SKU(s) not found:\n' + notFound.slice(0,10).join(', ') + (notFound.length>10?'...':'');
+  if (outOfStock.length) msg += '\n\n' + outOfStock.length + ' SKU(s) out of stock:\n' + outOfStock.slice(0,10).join(', ') + (outOfStock.length>10?'...':'');
+  alert(msg);
+  if (added > 0) togglePanel();
 }
 
-// Find products matching the target color
-function findColorMatches(targetRGB, colorName) {
-  // Step 1: Use already-detected products with same color name (fast)
-  var withColors = PRODUCTS.filter(function(p){ return p.color; });
-  var grid = document.getElementById('cm-grid');
-  var countEl = document.getElementById('cm-count');
+function downloadBulkTemplate() {
+  // Generate a sample XLSX template with headers and a few examples
+  var wb = XLSX.utils.book_new();
+  var data = [
+    ['SKU', 'Quantity'],
+    ['TTH-BKBT-001', 10],
+    ['TTH-CFPS-028', 5],
+    ['', '']
+  ];
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, 'Bulk Order');
+  XLSX.writeFile(wb, 'TieHub_Bulk_Order_Template.xlsx');
+}
 
-  if (withColors.length === 0) {
-    // No colors detected yet — kick off detection on a sample and try after
-    grid.innerHTML = '<div class="cm-loading">Analysing your catalog (first time may take a moment)...</div>';
-    analyzeColorsForCategory(PRODUCTS.slice(0, 300), function() {
-      findColorMatches(targetRGB, colorName);
-    });
-    return;
+
+// ===== WHATSAPP SHARE FILTERED VIEW =====
+function shareFilteredOnWhatsApp() {
+  var items = getFiltered();
+  if (!items.length) { alert('No products to share.'); return; }
+  var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
+  var pageURL = window.location.origin + window.location.pathname;
+  var filterDesc = [];
+  var pr = document.querySelector('input[name="f-price"]:checked');
+  if (pr && pr.value !== 'all') {
+    var prLabels = {'0-500':'Under Rs 500','500-1000':'Rs 500-1,000','1000-2500':'Rs 1,000-2,500','2500+':'Rs 2,500+'};
+    filterDesc.push(prLabels[pr.value]||pr.value);
   }
+  ['f-material','f-style','f-color'].forEach(function(name){
+    var checked = Array.from(document.querySelectorAll('input[name="'+name+'"]:checked')).map(function(i){return i.value;});
+    if (checked.length) filterDesc.push(checked.join(', '));
+  });
 
-  // Score products: same color name = 100 priority, then by RGB distance using stored color
-  var matches = withColors.map(function(p){
-    var pColorRGB = null;
-    for (var i = 0; i < COLOR_PALETTE.length; i++) {
-      if (COLOR_PALETTE[i][0] === p.color) { pColorRGB = COLOR_PALETTE[i][1]; break; }
-    }
-    var dist = pColorRGB ? colorDistance(targetRGB, pColorRGB) : 9999;
-    return { product: p, score: dist, sameName: p.color === colorName };
-  }).sort(function(a, b){
-    // Products with same color name first, then by distance
-    if (a.sameName !== b.sameName) return a.sameName ? -1 : 1;
-    return a.score - b.score;
-  }).slice(0, 60);
+  // Build a sample listing (first 10 products)
+  var sample = items.slice(0, 10).map(function(p, i){
+    return (i+1) + '. ' + p.sku + ' - ' + p.cat + ' - Rs ' + p.mrp.toLocaleString('en-IN');
+  }).join('\n');
 
-  if (!matches.length) {
-    grid.innerHTML = '<div class="cm-empty">No color-matched products found yet. Try browsing the catalog and the system will learn colors as you go.</div>';
-    return;
-  }
-  countEl.textContent = matches.length + ' Closest Matches';
-  grid.innerHTML = matches.map(function(m){
-    var p = m.product;
-    var imgTag = p.img
-      ? '<img src="'+p.img+'" alt="'+p.sku+'" style="width:100%;height:130px;object-fit:contain;background:#fff;padding:6px" onerror="this.style.display=\'none\'">'
-      : '<div style="width:100%;height:130px;background:#FAF6EF;display:flex;align-items:center;justify-content:center;color:#C7A653;font-family:serif;font-size:2rem">&#9672;</div>';
-    return '<div class="pcard" style="cursor:pointer" onclick="closeCameraSearch();showCatalog(\''+p.cat.replace(/'/g,"\\'")+'\');">'
-      + '<div class="pcard-img" style="aspect-ratio:1;padding:4px">'+imgTag+'</div>'
-      + '<div class="pcard-body" style="padding:0.6rem 0.7rem 0.8rem">'
-      + '<div class="pcard-sku">'+p.sku+'</div>'
-      + '<div class="pcard-cat" style="font-size:0.85rem">'+p.cat+'</div>'
-      + '<div class="pcard-price" style="font-size:1rem;margin-top:0.2rem"><span class="pcard-price-cur">Rs</span>'+p.mrp.toLocaleString('en-IN')+'</div>'
-      + '</div></div>';
-  }).join('');
+  var msg = '*The Tie Hub - ' + catName + '*\n';
+  if (filterDesc.length) msg += '_Filters: ' + filterDesc.join(' . ') + '_\n';
+  msg += '\n' + items.length + ' products available:\n\n' + sample;
+  if (items.length > 10) msg += '\n\n...and ' + (items.length - 10) + ' more.';
+  msg += '\n\n*View complete catalog:*\n' + pageURL;
+  msg += '\n\n_Reply with SKU + qty to place order, or visit the link above._';
+
+  var waURL = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(waURL, '_blank');
 }
 
 // Raw material / made-to-order helpers
@@ -2422,35 +2515,30 @@ buildAccDropdown();
   <div class="lb-sku" id="lb-sku"></div>
 </div>
 
-<!-- ===== CAMERA / COLOR MATCH MODAL ===== -->
-<div class="cm-over" id="cm-over">
-  <div class="cm-box">
+<!-- ===== QR SCANNER MODAL ===== -->
+<div class="cm-over" id="qr-over">
+  <div class="cm-box" style="max-width:520px">
     <div class="cm-hdr">
-      <div class="cm-title">Color <em>Match</em></div>
-      <button class="cm-close" onclick="closeCameraSearch()">&times;</button>
+      <div class="cm-title">Scan <em>Product</em></div>
+      <button class="cm-close" onclick="closeQRScanner()">&times;</button>
     </div>
-    <div class="cm-info">
-      <div class="cm-preview" id="cm-preview"><span style="color:var(--muted2);font-family:var(--f-body);font-style:italic">Photo</span></div>
-      <div class="cm-color-info">
-        <div class="cm-color-label">Detected Color</div>
-        <div class="cm-color-swatch">
-          <div class="cm-swatch" id="cm-swatch" style="background:#e0d8c8"></div>
-          <div>
-            <div class="cm-color-name" id="cm-color-name">—</div>
-            <div class="cm-color-rgb" id="cm-color-rgb"></div>
-          </div>
+    <div style="padding:1.2rem 2rem;background:var(--cream);text-align:center">
+      <div style="position:relative;background:#000;aspect-ratio:1;max-width:340px;margin:0 auto;overflow:hidden">
+        <video id="qr-video" playsinline style="width:100%;height:100%;object-fit:cover" muted></video>
+        <div style="position:absolute;inset:0;border:2px solid rgba(199,166,83,0.6);box-shadow:0 0 0 100vmax rgba(26,22,16,0.3);pointer-events:none">
+          <div style="position:absolute;top:25%;left:15%;right:15%;bottom:25%;border:2px solid #C7A653"></div>
         </div>
       </div>
-    </div>
-    <div class="cm-results">
-      <div class="cm-count" id="cm-count"></div>
-      <div class="cm-grid" id="cm-grid">
-        <div class="cm-loading">Tap the camera button to capture or choose a photo</div>
+      <div id="qr-msg" style="font-family:var(--f-body);font-size:1rem;color:var(--ink);margin-top:1rem;font-style:italic">Loading camera...</div>
+      <div style="margin-top:1rem;display:flex;gap:0.6rem;justify-content:center;flex-wrap:wrap">
+        <button onclick="document.getElementById('qr-input').click()" style="background:var(--cream2);border:1px solid var(--border2);color:var(--ink);padding:0.55rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;font-weight:500">⬆ Upload Photo Instead</button>
       </div>
     </div>
-    <div class="cm-disclaimer">Color-based search · matches similar colors from your catalog · results may vary based on lighting</div>
+    <div class="cm-disclaimer">Scan any QR code with your product's SKU printed on it · Auto-adds to cart and jumps to product</div>
   </div>
 </div>
+<input type="file" id="qr-input" accept="image/*" style="display:none" onchange="onQRImagePick(event)">
+<input type="file" id="bulk-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="onBulkFilePicked(event)">
 
 <!-- ===== ORDER CONFIRMATION MODAL ===== -->
 <div class="confirm-over" id="confirm-over">
