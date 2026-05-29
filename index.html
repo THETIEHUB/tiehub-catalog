@@ -6,7 +6,7 @@
 <title>The Tie Hub — B2B Wholesale Catalog 2025</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -1114,9 +1114,14 @@ function closeQRScanner() {
   stopQRScan();
 }
 
-var _qrStream = null, _qrAnimating = false;
+var _zxReader = null;
 function startQRScan() {
   var msgEl = document.getElementById('qr-msg');
+  if (typeof ZXingBrowser === 'undefined') {
+    msgEl.innerHTML = 'Scanner library loading... please wait.';
+    setTimeout(startQRScan, 800);
+    return;
+  }
   if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia) {
     msgEl.innerHTML = 'Live camera not supported on this device.<br><strong>Use "Upload Photo Instead" below.</strong>';
     return;
@@ -1126,58 +1131,42 @@ function startQRScan() {
     return;
   }
   msgEl.textContent = 'Requesting camera permission...';
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-    audio: false
-  }).then(function(stream){
-    _qrStream = stream;
-    var v = document.getElementById('qr-video');
-    v.srcObject = stream;
-    v.setAttribute('playsinline', '');
-    v.setAttribute('autoplay', '');
-    v.muted = true;
-    var playPromise = v.play();
-    if (playPromise && playPromise.catch) playPromise.catch(function(){});
-    _qrAnimating = true;
-    tickQRScan();
-    msgEl.textContent = 'Point camera at a QR code with the product SKU';
-  }).catch(function(err){
-    var reason = '';
-    if (err && err.name === 'NotAllowedError') reason = 'Camera permission denied. Please allow camera access in your browser settings.';
-    else if (err && err.name === 'NotFoundError') reason = 'No camera found on this device.';
-    else if (err && err.name === 'NotReadableError') reason = 'Camera is being used by another app. Close other apps and try again.';
-    else reason = 'Camera could not start (' + (err && err.name || 'unknown') + ').';
-    msgEl.innerHTML = reason + '<br><strong>Use "Upload Photo Instead" below.</strong>';
-  });
+  try {
+    _zxReader = new ZXingBrowser.BrowserMultiFormatReader();
+    var videoEl = document.getElementById('qr-video');
+    videoEl.setAttribute('playsinline', '');
+    videoEl.setAttribute('autoplay', '');
+    videoEl.muted = true;
+    _zxReader.decodeFromVideoDevice(undefined, videoEl, function(result, err){
+      if (result) {
+        var raw = result.getText ? result.getText() : String(result);
+        onQRDetected(raw);
+      }
+      // ignore errors - they fire on every frame without a barcode
+    }).then(function(){
+      msgEl.textContent = 'Point camera at the barcode or QR code on the product tag';
+    }).catch(function(err){
+      var reason = '';
+      if (err && err.name === 'NotAllowedError') reason = 'Camera permission denied. Please allow camera access in your browser settings.';
+      else if (err && err.name === 'NotFoundError') reason = 'No camera found on this device.';
+      else if (err && err.name === 'NotReadableError') reason = 'Camera is being used by another app. Close other apps and try again.';
+      else reason = 'Camera could not start (' + (err && err.name || 'unknown') + ').';
+      msgEl.innerHTML = reason + '<br><strong>Use "Upload Photo Instead" below.</strong>';
+    });
+  } catch(e) {
+    msgEl.innerHTML = 'Scanner error: ' + (e.message || 'unknown') + '<br><strong>Use "Upload Photo Instead" below.</strong>';
+  }
 }
 function stopQRScan() {
-  _qrAnimating = false;
-  if (_qrStream) {
-    _qrStream.getTracks().forEach(function(t){t.stop();});
-    _qrStream = null;
+  if (_zxReader) {
+    try { _zxReader.reset(); } catch(e) {}
+    _zxReader = null;
   }
-}
-function tickQRScan() {
-  if (!_qrAnimating) return;
-  if (typeof jsQR === 'undefined') { setTimeout(tickQRScan, 600); return; }
-  var v = document.getElementById('qr-video');
-  if (v && v.readyState === v.HAVE_ENOUGH_DATA) {
-    var canvas = document.createElement('canvas');
-    canvas.width = v.videoWidth; canvas.height = v.videoHeight;
-    var ctx = canvas.getContext('2d');
-    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-    try {
-      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var code = jsQR(imageData.data, imageData.width, imageData.height);
-      if (code && code.data) { onQRDetected(code.data); return; }
-    } catch(e) {}
-  }
-  requestAnimationFrame(tickQRScan);
 }
 
 function onQRDetected(raw) {
   stopQRScan();
-  // Try to find product by SKU (the QR code should contain the SKU)
+  // Try to find product by SKU (barcode/QR contains the SKU)
   var sku = String(raw).trim().toUpperCase();
   var product = PRODUCTS.find(function(p){ return p.sku.toUpperCase() === sku; });
   // Also try partial match in case URL is embedded
@@ -1203,7 +1192,7 @@ function onQRDetected(raw) {
       addItem(product.sku);
     }, 400);
   } else {
-    document.getElementById('qr-msg').textContent = 'SKU "' + sku.slice(0,30) + '" not found in catalog. Try again.';
+    document.getElementById('qr-msg').textContent = 'Code scanned: "' + sku.slice(0,30) + '" - not found in catalog. Try again.';
     setTimeout(startQRScan, 1800);
   }
 }
@@ -1211,30 +1200,31 @@ function onQRDetected(raw) {
 function onQRImagePick(event) {
   var file = event.target.files && event.target.files[0];
   if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var img = new Image();
-    img.onload = function() {
-      if (typeof jsQR === 'undefined') {
-        alert('QR library still loading. Please try again in a moment.');
-        return;
-      }
-      var canvas = document.createElement('canvas');
-      canvas.width = img.width; canvas.height = img.height;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      try {
-        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        var code = jsQR(imageData.data, imageData.width, imageData.height);
-        if (code && code.data) onQRDetected(code.data);
-        else document.getElementById('qr-msg').textContent = 'No QR code found in image. Try another photo.';
-      } catch(e) {
-        document.getElementById('qr-msg').textContent = 'Could not read this image.';
-      }
-    };
-    img.src = e.target.result;
+  if (typeof ZXingBrowser === 'undefined') {
+    alert('Scanner library still loading. Please try again in a moment.');
+    return;
+  }
+  var url = URL.createObjectURL(file);
+  var img = new Image();
+  img.onload = function() {
+    try {
+      var reader = new ZXingBrowser.BrowserMultiFormatReader();
+      reader.decodeFromImageElement(img).then(function(result){
+        var raw = result.getText ? result.getText() : String(result);
+        onQRDetected(raw);
+      }).catch(function(){
+        document.getElementById('qr-msg').textContent = 'No barcode or QR code found in image. Try a clearer photo with the code centered.';
+      });
+    } catch(e) {
+      document.getElementById('qr-msg').textContent = 'Could not read this image.';
+    }
+    URL.revokeObjectURL(url);
   };
-  reader.readAsDataURL(file);
+  img.onerror = function() {
+    document.getElementById('qr-msg').textContent = 'Could not load image.';
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
   event.target.value = '';
 }
 
@@ -2614,12 +2604,12 @@ buildAccDropdown();
           <div style="position:absolute;top:25%;left:15%;right:15%;bottom:25%;border:2px solid #C7A653"></div>
         </div>
       </div>
-      <div id="qr-msg" style="font-family:var(--f-body);font-size:1rem;color:var(--ink);margin-top:1rem;font-style:italic">Loading camera...</div>
+      <div id="qr-msg" style="font-family:var(--f-body);font-size:1rem;color:var(--ink);margin-top:1rem;font-style:italic">Loading scanner...</div>
       <div style="margin-top:1rem;display:flex;gap:0.6rem;justify-content:center;flex-wrap:wrap">
         <button onclick="document.getElementById('qr-input').click()" style="background:var(--cream2);border:1px solid var(--border2);color:var(--ink);padding:0.55rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;font-weight:500">⬆ Upload Photo Instead</button>
       </div>
     </div>
-    <div class="cm-disclaimer">Scan any QR code with your product's SKU printed on it · Auto-adds to cart and jumps to product</div>
+    <div class="cm-disclaimer">Scans barcodes and QR codes containing your product SKU · Auto-adds to cart and jumps to product</div>
   </div>
 </div>
 <input type="file" id="qr-input" accept="image/*" style="display:none" onchange="onQRImagePick(event)">
