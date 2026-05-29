@@ -1116,20 +1116,38 @@ function closeQRScanner() {
 
 var _qrStream = null, _qrAnimating = false;
 function startQRScan() {
-  if (!('mediaDevices' in navigator)) {
-    document.getElementById('qr-msg').textContent = 'Camera not supported on this device. Use the upload button below.';
+  var msgEl = document.getElementById('qr-msg');
+  if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia) {
+    msgEl.innerHTML = 'Live camera not supported on this device.<br><strong>Use "Upload Photo Instead" below.</strong>';
     return;
   }
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream){
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    msgEl.innerHTML = 'Camera needs a secure (HTTPS) connection.<br><strong>Use "Upload Photo Instead" below.</strong>';
+    return;
+  }
+  msgEl.textContent = 'Requesting camera permission...';
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    audio: false
+  }).then(function(stream){
     _qrStream = stream;
     var v = document.getElementById('qr-video');
     v.srcObject = stream;
-    v.play();
+    v.setAttribute('playsinline', '');
+    v.setAttribute('autoplay', '');
+    v.muted = true;
+    var playPromise = v.play();
+    if (playPromise && playPromise.catch) playPromise.catch(function(){});
     _qrAnimating = true;
     tickQRScan();
-    document.getElementById('qr-msg').textContent = 'Point camera at a product QR code or barcode';
+    msgEl.textContent = 'Point camera at a QR code with the product SKU';
   }).catch(function(err){
-    document.getElementById('qr-msg').textContent = 'Could not access camera. Try the upload button below.';
+    var reason = '';
+    if (err && err.name === 'NotAllowedError') reason = 'Camera permission denied. Please allow camera access in your browser settings.';
+    else if (err && err.name === 'NotFoundError') reason = 'No camera found on this device.';
+    else if (err && err.name === 'NotReadableError') reason = 'Camera is being used by another app. Close other apps and try again.';
+    else reason = 'Camera could not start (' + (err && err.name || 'unknown') + ').';
+    msgEl.innerHTML = reason + '<br><strong>Use "Upload Photo Instead" below.</strong>';
   });
 }
 function stopQRScan() {
@@ -1223,7 +1241,27 @@ function onQRImagePick(event) {
 
 // ===== BULK EXCEL/CSV IMPORT =====
 function openBulkImport() {
-  document.getElementById('bulk-input').click();
+  // Show a small choice modal: Upload existing file OR Download template
+  var existing = document.getElementById('bulk-choice');
+  if (existing) { existing.style.display = 'flex'; return; }
+  var modal = document.createElement('div');
+  modal.id = 'bulk-choice';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,16,0.85);z-index:550;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML =
+    '<div style="background:var(--cream);max-width:440px;width:100%;border-top:3px solid var(--gold)">'
+    + '<div style="padding:1.5rem 1.8rem 1rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+    + '<div style="font-family:var(--f-display);font-size:1.4rem;font-weight:500;color:var(--dark)">Bulk <em style="color:var(--gold);font-weight:400">Order</em></div>'
+    + '<button onclick="document.getElementById(\'bulk-choice\').style.display=\'none\'" style="background:none;border:1px solid var(--border2);color:var(--muted);width:30px;height:30px;cursor:pointer;font-size:1.1rem;font-family:var(--f-ui)">&times;</button>'
+    + '</div>'
+    + '<div style="padding:1.5rem 1.8rem">'
+    + '<p style="font-family:var(--f-body);font-size:0.98rem;color:var(--ink);line-height:1.6;margin-bottom:1.3rem">First time? Download our Excel template with examples and instructions. Already have your file ready? Upload it directly.</p>'
+    + '<button onclick="downloadBulkTemplate();" style="display:block;width:100%;background:var(--cream2);border:1px solid var(--border2);color:var(--ink);padding:0.85rem 1rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;font-weight:500;margin-bottom:0.7rem">⬇ Download Excel Template</button>'
+    + '<div style="font-family:var(--f-body);font-size:0.85rem;color:var(--muted);font-style:italic;text-align:center;margin:0.7rem 0">— or —</div>'
+    + '<button onclick="document.getElementById(\'bulk-choice\').style.display=\'none\';document.getElementById(\'bulk-input\').click();" style="display:block;width:100%;background:var(--dark);border:none;color:var(--cream);padding:0.85rem 1rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;font-weight:500">⬆ Upload My Excel File</button>'
+    + '<div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted2);margin-top:1rem;text-align:center;letter-spacing:0.05em;line-height:1.6">Format needed: SKU column + Quantity column<br>Accepted: .xlsx, .xls, .csv</div>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(modal);
 }
 
 function onBulkFilePicked(event) {
@@ -1278,16 +1316,63 @@ function processBulkRows(rows, fileName) {
 }
 
 function downloadBulkTemplate() {
-  // Generate a sample XLSX template with headers and a few examples
   var wb = XLSX.utils.book_new();
-  var data = [
-    ['SKU', 'Quantity'],
-    ['TTH-BKBT-001', 10],
-    ['TTH-CFPS-028', 5],
-    ['', '']
+
+  // Pick up to 5 real products from the catalog as examples (so users see actual SKUs)
+  var examples = PRODUCTS.slice(0, 5).map(function(p){ return [p.sku, 10, p.cat, p.mrp]; });
+  while (examples.length < 5) examples.push(['', 0, '', 0]);
+
+  // Sheet 1: ORDER (the one user fills in)
+  var orderData = [
+    ['SKU', 'Quantity', 'Category (auto)', 'MRP (auto)'],
+    ['# Replace these example rows with your own SKUs and quantities', '', '', ''],
+    examples[0], examples[1], examples[2], examples[3], examples[4],
+    ['', '', '', ''],
+    ['# Add more rows below as needed', '', '', '']
   ];
-  var ws = XLSX.utils.aoa_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, 'Bulk Order');
+  var ws1 = XLSX.utils.aoa_to_sheet(orderData);
+  ws1['!cols'] = [ {wch:22}, {wch:12}, {wch:20}, {wch:12} ];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Bulk Order');
+
+  // Sheet 2: INSTRUCTIONS
+  var instr = [
+    ['THE TIE HUB - BULK ORDER TEMPLATE'],
+    [''],
+    ['HOW TO USE THIS TEMPLATE:'],
+    [''],
+    ['1. Open the "Bulk Order" tab (first sheet)'],
+    ['2. Replace the example rows with your own SKUs and quantities'],
+    ['3. SKU = the product code from our catalog (e.g., TTH-BKBT-001)'],
+    ['4. Quantity = how many pieces you want to order (whole numbers only)'],
+    ['5. Category and MRP columns are for your reference only - they will be auto-filled from our system when you upload'],
+    ['6. Save the file (keep .xlsx format)'],
+    ['7. Open thetiehub.github.io/tiehub-catalog/ on phone or computer'],
+    ['8. Click the cart (Order) button → "Upload Excel File"'],
+    ['9. Select your saved file'],
+    ['10. All items added to your cart automatically'],
+    [''],
+    ['IMPORTANT RULES:'],
+    [''],
+    ['- SKU must match exactly (case-insensitive) e.g. TTH-BKBT-001'],
+    ['- Quantity must be a whole number (no decimals)'],
+    ['- Out-of-stock items will be skipped (you will see a list)'],
+    ['- Made-to-order items: 7-day dispatch applies to entire order'],
+    ['- For quantities exceeding ready stock, made-to-order kicks in automatically'],
+    [''],
+    ['NEED HELP?'],
+    ['Call: 26130975'],
+    ['Email: dme@thetiehub.com'],
+    [''],
+    ['---'],
+    ['The Tie Hub - By Big Five Inc.'],
+    ['Ground Floor, B-1, Amrit Niwas, B Wing'],
+    ['15 Sarojini Road, Vile Parle West, Mumbai 400056'],
+    ['GSTIN: 27AYNPK2735R1ZM']
+  ];
+  var ws2 = XLSX.utils.aoa_to_sheet(instr);
+  ws2['!cols'] = [ {wch:90} ];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Instructions');
+
   XLSX.writeFile(wb, 'TieHub_Bulk_Order_Template.xlsx');
 }
 
