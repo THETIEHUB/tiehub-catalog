@@ -733,7 +733,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <div class="fg-body" id="filter-colors"></div>
       </div>
     </aside>
-    <div class="filter-overlay" id="filter-overlay" onclick="closeMobileFilters()"></div>
+
+    <!-- PRODUCT GRID -->
     <div class="cat-main">
       <div class="active-filters" id="active-filters"></div>
       <div class="pgrid" id="pgrid">
@@ -744,6 +745,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       </div>
     </div>
   </div>
+  <!-- Filter overlay — outside grid so it doesn't affect desktop layout -->
+  <div class="filter-overlay" id="filter-overlay" onclick="closeMobileFilters()"></div>
 </div>
 
 <!-- ORDER PANEL -->
