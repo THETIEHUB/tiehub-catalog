@@ -6,7 +6,7 @@
 <title>The Tie Hub — B2B Wholesale Catalog 2025</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -430,6 +430,11 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 
 /* ===== MOBILE ===== */
 @media(max-width:640px){
+  /* CRITICAL — force product grid visible on mobile */
+  .cat-layout{grid-template-columns:1fr !important}
+  .cat-main{display:block !important;width:100% !important}
+  .pgrid{display:grid !important;grid-template-columns:repeat(2,1fr) !important;gap:0.6rem !important;padding:0.8rem !important}
+  /* end critical */
   .topbar{display:none}
   .header{padding:0.7rem 0.8rem;height:auto;flex-wrap:wrap;gap:0.6rem}
   .brand-name{font-size:1.3rem;letter-spacing:0.08em}
@@ -1143,64 +1148,93 @@ function closeQRScanner() {
   stopQRScan();
 }
 
-var _zxReader = null;
+var _scannerRunning = false;
+
 function startQRScan() {
   var msgEl = document.getElementById('qr-msg');
-  if (typeof ZXingBrowser === 'undefined') {
-    msgEl.innerHTML = 'Scanner library loading... please wait.';
+
+  if (typeof Quagga === 'undefined') {
+    msgEl.textContent = 'Scanner loading... please wait.';
     setTimeout(startQRScan, 800);
     return;
   }
   if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia) {
-    msgEl.innerHTML = 'Live camera not supported on this device.<br><strong>Use "Upload Photo Instead" below.</strong>';
+    msgEl.innerHTML = 'Camera not supported.<br><strong>Use "Upload Photo Instead" below.</strong>';
     return;
   }
   if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-    msgEl.innerHTML = 'Camera needs a secure (HTTPS) connection.<br><strong>Use "Upload Photo Instead" below.</strong>';
+    msgEl.innerHTML = 'Camera needs HTTPS.<br><strong>Use "Upload Photo Instead" below.</strong>';
     return;
   }
-  msgEl.textContent = 'Requesting camera permission...';
-  try {
-    _zxReader = new ZXingBrowser.BrowserMultiFormatReader();
-    var videoEl = document.getElementById('qr-video');
-    videoEl.setAttribute('playsinline', '');
-    videoEl.setAttribute('autoplay', '');
-    videoEl.muted = true;
-    _zxReader.decodeFromVideoDevice(undefined, videoEl, function(result, err){
-      if (result) {
-        var raw = result.getText ? result.getText() : String(result);
-        onQRDetected(raw);
+
+  msgEl.textContent = 'Starting camera...';
+  if (_scannerRunning) { try { Quagga.stop(); } catch(e){} _scannerRunning = false; }
+
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: document.getElementById('qr-video-wrap'),
+      constraints: {
+        facingMode: 'environment',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       }
-      // ignore errors - they fire on every frame without a barcode
-    }).then(function(){
-      msgEl.textContent = 'Point camera at the barcode or QR code on the product tag';
-    }).catch(function(err){
+    },
+    locator: { patchSize: 'medium', halfSample: true },
+    numOfWorkers: 0,
+    frequency: 10,
+    decoder: {
+      readers: [
+        'code_128_reader',
+        'code_39_reader',
+        'ean_reader',
+        'ean_8_reader',
+        'upc_reader',
+        'codabar_reader'
+      ]
+    },
+    locate: true
+  }, function(err) {
+    if (err) {
       var reason = '';
-      if (err && err.name === 'NotAllowedError') reason = 'Camera permission denied. Please allow camera access in your browser settings.';
-      else if (err && err.name === 'NotFoundError') reason = 'No camera found on this device.';
-      else if (err && err.name === 'NotReadableError') reason = 'Camera is being used by another app. Close other apps and try again.';
-      else reason = 'Camera could not start (' + (err && err.name || 'unknown') + ').';
+      if (err.name === 'NotAllowedError') reason = 'Camera permission denied. Please allow camera access.';
+      else if (err.name === 'NotFoundError') reason = 'No camera found on this device.';
+      else if (err.name === 'NotReadableError') reason = 'Camera in use by another app. Close other apps and retry.';
+      else reason = 'Camera error: ' + (err.message || err.name || 'unknown');
       msgEl.innerHTML = reason + '<br><strong>Use "Upload Photo Instead" below.</strong>';
-    });
-  } catch(e) {
-    msgEl.innerHTML = 'Scanner error: ' + (e.message || 'unknown') + '<br><strong>Use "Upload Photo Instead" below.</strong>';
-  }
+      return;
+    }
+    _scannerRunning = true;
+    Quagga.start();
+    msgEl.textContent = 'Point camera at the barcode on your product tag';
+  });
+
+  // Listen for detected barcodes
+  Quagga.offDetected(); // remove old listeners
+  Quagga.onDetected(function(result) {
+    var code = result && result.codeResult && result.codeResult.code;
+    if (code) onQRDetected(code);
+  });
 }
+
 function stopQRScan() {
-  if (_zxReader) {
-    try { _zxReader.reset(); } catch(e) {}
-    _zxReader = null;
+  if (_scannerRunning) {
+    try { Quagga.stop(); } catch(e) {}
+    _scannerRunning = false;
   }
+  // Clear video wrap
+  var wrap = document.getElementById('qr-video-wrap');
+  if (wrap) wrap.innerHTML = '';
 }
 
 function onQRDetected(raw) {
   stopQRScan();
-  // Try to find product by SKU (barcode/QR contains the SKU)
   var sku = String(raw).trim().toUpperCase();
   var product = PRODUCTS.find(function(p){ return p.sku.toUpperCase() === sku; });
-  // Also try partial match in case URL is embedded
+  // Also try partial match in case prefix/suffix noise
   if (!product) {
-    var match = raw.match(/TTH[-_][A-Z0-9_-]+/i);
+    var match = raw.match(/TTH[-][A-Z0-9_-]+/i);
     if (match) {
       var s = match[0].toUpperCase();
       product = PRODUCTS.find(function(p){ return p.sku.toUpperCase() === s; });
@@ -1208,7 +1242,6 @@ function onQRDetected(raw) {
   }
   if (product) {
     closeQRScanner();
-    // Open the product's category page and scroll to it
     showCatalog(product.cat);
     setTimeout(function(){
       var card = document.getElementById('pc-' + product.sku.replace(/[^a-z0-9]/gi,'-'));
@@ -1217,43 +1250,39 @@ function onQRDetected(raw) {
         card.style.outline = '3px solid #8B6F1F';
         setTimeout(function(){ card.style.outline = ''; }, 2500);
       }
-      // Auto-add to cart
       addItem(product.sku);
     }, 400);
   } else {
-    document.getElementById('qr-msg').textContent = 'Code scanned: "' + sku.slice(0,30) + '" - not found in catalog. Try again.';
-    setTimeout(startQRScan, 1800);
+    var msgEl = document.getElementById('qr-msg');
+    if (msgEl) msgEl.textContent = 'Scanned: "' + sku.slice(0,25) + '" — not found. Try again.';
+    setTimeout(startQRScan, 2000);
   }
 }
 
 function onQRImagePick(event) {
   var file = event.target.files && event.target.files[0];
   if (!file) return;
-  if (typeof ZXingBrowser === 'undefined') {
-    alert('Scanner library still loading. Please try again in a moment.');
+  if (typeof Quagga === 'undefined') {
+    alert('Scanner still loading. Please wait a moment and try again.');
     return;
   }
+  var msgEl = document.getElementById('qr-msg');
+  if (msgEl) msgEl.textContent = 'Reading barcode from image...';
   var url = URL.createObjectURL(file);
-  var img = new Image();
-  img.onload = function() {
-    try {
-      var reader = new ZXingBrowser.BrowserMultiFormatReader();
-      reader.decodeFromImageElement(img).then(function(result){
-        var raw = result.getText ? result.getText() : String(result);
-        onQRDetected(raw);
-      }).catch(function(){
-        document.getElementById('qr-msg').textContent = 'No barcode or QR code found in image. Try a clearer photo with the code centered.';
-      });
-    } catch(e) {
-      document.getElementById('qr-msg').textContent = 'Could not read this image.';
+  Quagga.decodeSingle({
+    decoder: {
+      readers: ['code_128_reader','code_39_reader','ean_reader','ean_8_reader','upc_reader','codabar_reader']
+    },
+    locate: true,
+    src: url
+  }, function(result) {
+    URL.revokeObjectURL(url);
+    if (result && result.codeResult && result.codeResult.code) {
+      onQRDetected(result.codeResult.code);
+    } else {
+      if (msgEl) msgEl.textContent = 'No barcode found in image. Try a clearer photo — hold steady, good light, barcode fully in frame.';
     }
-    URL.revokeObjectURL(url);
-  };
-  img.onerror = function() {
-    document.getElementById('qr-msg').textContent = 'Could not load image.';
-    URL.revokeObjectURL(url);
-  };
-  img.src = url;
+  });
   event.target.value = '';
 }
 
@@ -2641,13 +2670,10 @@ buildAccDropdown();
       <button class="cm-close" onclick="closeQRScanner()">&times;</button>
     </div>
     <div style="padding:1.2rem 2rem;background:var(--cream);text-align:center">
-      <div style="position:relative;background:#000;aspect-ratio:1;max-width:340px;margin:0 auto;overflow:hidden">
-        <video id="qr-video" playsinline style="width:100%;height:100%;object-fit:cover" muted></video>
-        <div style="position:absolute;inset:0;border:2px solid rgba(199,166,83,0.6);box-shadow:0 0 0 100vmax rgba(26,22,16,0.3);pointer-events:none">
-          <div style="position:absolute;top:25%;left:15%;right:15%;bottom:25%;border:2px solid #C7A653"></div>
-        </div>
+      <div id="qr-video-wrap" style="position:relative;background:#000;width:100%;max-width:340px;height:260px;margin:0 auto;overflow:hidden">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#555;font-size:0.8rem;font-family:sans-serif;z-index:0">Camera loading...</div>
       </div>
-      <div id="qr-msg" style="font-family:var(--f-body);font-size:1rem;color:var(--ink);margin-top:1rem;font-style:italic">Loading scanner...</div>
+      <div id="qr-msg" style="font-family:var(--f-body);font-size:0.95rem;color:var(--ink);margin-top:1rem;font-style:italic;line-height:1.5">Starting scanner...</div>
       <div style="margin-top:1rem;display:flex;gap:0.6rem;justify-content:center;flex-wrap:wrap">
         <button onclick="document.getElementById('qr-input').click()" style="background:var(--cream2);border:1px solid var(--border2);color:var(--ink);padding:0.55rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;font-weight:500">⬆ Upload Photo Instead</button>
       </div>
