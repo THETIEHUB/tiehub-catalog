@@ -97,6 +97,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
   padding:0.6rem 0;
   max-height:80vh;overflow-y:auto;
 }
+.dropdown.open{display:block}
 .nav-item:hover .dropdown{display:block}
 .dd-item{padding:0.7rem 1.6rem;font-size:0.7rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink2);cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;transition:background 0.15s;font-family:var(--f-ui);font-weight:400}
 .dd-item:hover{background:var(--cream2);color:var(--gold)}
@@ -196,7 +197,9 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
   .cat-layout{grid-template-columns:1fr}
   .filter-sidebar{position:fixed;top:0;left:-280px;width:280px;height:100vh;max-height:100vh;background:var(--cream);z-index:300;transition:left 0.3s;box-shadow:0 0 40px rgba(0,0,0,0.2);padding-top:1.2rem}
   .filter-sidebar.open{left:0}
-  .filter-sidebar.open::before{content:'';position:fixed;top:0;left:280px;width:calc(100vw - 280px);height:100vh;background:rgba(0,0,0,0.4);z-index:-1}
+  .filter-overlay{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:299}
+  .filter-overlay.show{display:block}
+  #fs-close-btn{display:inline-flex !important}
   .mobile-filter-btn{display:inline-flex}
   .cat-main .pgrid{padding:1.2rem}
 }
@@ -441,7 +444,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
   .mainnav::-webkit-scrollbar{display:none}
   .nav-item{flex-shrink:0;height:42px}
   .nav-link{padding:0 0.7rem;font-size:0.62rem;letter-spacing:0.1em;height:42px}
-  .dropdown{position:fixed;left:0;right:0;top:auto;min-width:0;max-height:55vh}
+  .dropdown{position:fixed;left:0;right:0;top:auto;min-width:0;max-height:55vh;display:none}
+  .dropdown.open{display:block}
 
   .hero{min-height:280px;padding:2.5rem 1rem}
   .hero-h{font-size:2rem;line-height:1.1}
@@ -586,7 +590,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <button class="nav-link" id="nav-Gifting" onclick="showCatalog('Gifting')">Gifting</button>
   </div>
   <div class="nav-item">
-    <button class="nav-link acc-link" id="nav-Accessories">
+    <button class="nav-link acc-link" id="nav-Accessories" onclick="toggleAccDropdown(event)">
       Accessories &nbsp;<span class="nav-chevron">▾</span>
     </button>
     <div class="dropdown" id="acc-dropdown"></div>
@@ -673,7 +677,10 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <aside class="filter-sidebar" id="filter-sidebar">
       <div class="fs-head">
         <span class="fs-title">Refine</span>
-        <button class="fs-clear" onclick="clearFilters()">Clear All</button>
+        <div style="display:flex;align-items:center;gap:0.6rem">
+          <button class="fs-clear" onclick="clearFilters()">Clear All</button>
+          <button onclick="closeMobileFilters()" style="display:none;background:none;border:1px solid var(--border2);color:var(--muted);width:26px;height:26px;cursor:pointer;font-size:1rem;font-family:var(--f-ui);align-items:center;justify-content:center" id="fs-close-btn">&times;</button>
+        </div>
       </div>
 
       <!-- PRICE RANGE -->
@@ -726,8 +733,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <div class="fg-body" id="filter-colors"></div>
       </div>
     </aside>
-
-    <!-- PRODUCT GRID -->
+    <div class="filter-overlay" id="filter-overlay" onclick="closeMobileFilters()"></div>
     <div class="cat-main">
       <div class="active-filters" id="active-filters"></div>
       <div class="pgrid" id="pgrid">
@@ -975,6 +981,26 @@ function setNavActive(key) {
   if (key) {
     const el = document.getElementById('nav-'+key);
     if (el) el.classList.add('active');
+  }
+}
+
+function toggleAccDropdown(e) {
+  e.stopPropagation();
+  var dd = document.getElementById('acc-dropdown');
+  var isOpen = dd.classList.contains('open');
+  // Close any other open dropdowns first
+  document.querySelectorAll('.dropdown.open').forEach(function(d){ d.classList.remove('open'); });
+  if (!isOpen) {
+    dd.classList.add('open');
+    // Close when tapping anywhere else
+    setTimeout(function(){
+      document.addEventListener('click', function closeDD(ev){
+        if (!dd.contains(ev.target)) {
+          dd.classList.remove('open');
+          document.removeEventListener('click', closeDD);
+        }
+      });
+    }, 50);
   }
 }
 
@@ -1531,7 +1557,21 @@ function toggleFilterGroup(headEl) {
 }
 
 function toggleMobileFilters() {
-  document.getElementById('filter-sidebar').classList.toggle('open');
+  var sidebar = document.getElementById('filter-sidebar');
+  var overlay = document.getElementById('filter-overlay');
+  var isOpen = sidebar.classList.contains('open');
+  if (isOpen) {
+    sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('show');
+  } else {
+    sidebar.classList.add('open');
+    if (overlay) overlay.classList.add('show');
+  }
+}
+function closeMobileFilters() {
+  document.getElementById('filter-sidebar').classList.remove('open');
+  var overlay = document.getElementById('filter-overlay');
+  if (overlay) overlay.classList.remove('show');
 }
 
 function renderActiveFilters() {
@@ -2572,7 +2612,7 @@ function buildAccDropdown() {
   dd.innerHTML = accCats.map(cat => {
     const meta = CATS_META.find(c=>c.name===cat);
     const cnt = meta ? meta.count : '';
-    return `<div class="dd-item" onclick="showCatalog('${cat}')">
+    return `<div class="dd-item" onclick="document.getElementById('acc-dropdown').classList.remove('open');showCatalog('${cat}')">
       <span>${EMOJI[cat]||'*'} ${cat}</span>
       <span class="dd-count">${cnt}</span>
     </div>`;
