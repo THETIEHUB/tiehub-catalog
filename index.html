@@ -6,7 +6,6 @@
 <title>The Tie Hub — B2B Wholesale Catalog 2025</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -104,7 +103,16 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .dd-count{font-size:0.6rem;color:var(--muted2);font-weight:300;letter-spacing:0.08em}
 .nav-spacer{flex:1}
 
-/* ===== HOME PAGE ===== */
+/* ===== PRICE SLIDER ===== */
+.price-slider-wrap{position:relative;height:24px;margin:0 6px}
+.price-track{position:absolute;top:50%;left:0;right:0;height:3px;background:var(--border2);transform:translateY(-50%);border-radius:2px}
+.price-range-fill{position:absolute;top:50%;height:3px;background:var(--gold);transform:translateY(-50%);border-radius:2px;pointer-events:none}
+.price-thumb{position:absolute;width:100%;height:100%;top:0;left:0;appearance:none;-webkit-appearance:none;background:transparent;pointer-events:none;outline:none;margin:0;padding:0}
+.price-thumb::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--white);border:2px solid var(--gold);cursor:pointer;pointer-events:all;box-shadow:0 1px 4px rgba(0,0,0,0.15);transition:border-color 0.15s,transform 0.1s}
+.price-thumb::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--white);border:2px solid var(--gold);cursor:pointer;pointer-events:all;box-shadow:0 1px 4px rgba(0,0,0,0.15)}
+.price-thumb::-webkit-slider-thumb:hover,.price-thumb:active::-webkit-slider-thumb{border-color:var(--gold2);transform:scale(1.15)}
+
+
 #page-home{display:block}
 #page-catalog{display:none}
 
@@ -560,13 +568,11 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <div class="brand-sub">by Big Five Inc. · B2B Wholesale</div>
   </div>
   <div class="header-right">
-    <div class="search-wrap">
-      <input class="search-inp" id="search" placeholder="Search SKU, category..." oninput="onSearch()">
+    <div class="search-wrap" style="position:relative">
+      <input class="search-inp" id="search" placeholder="Search SKU e.g. TTH-WLPS-1026" oninput="onSearch()" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
       <span class="search-icon">⌕</span>
+      <div id="search-quickresult" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1px solid var(--gold);border-top:none;z-index:500;padding:0.8rem 1rem;box-shadow:0 8px 24px rgba(0,0,0,0.12)"></div>
     </div>
-    <button class="cam-btn" onclick="openQRScanner()" title="Scan QR / barcode of a product">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="14" y1="14" x2="14" y2="17"></line><line x1="17" y1="14" x2="20" y2="14"></line><line x1="14" y1="20" x2="17" y2="20"></line><line x1="20" y1="17" x2="20" y2="20"></line></svg>
-    </button>
     <button class="order-btn" onclick="togglePanel()">
       🛒 &nbsp;Order
       <span class="order-badge" id="cart-count">0</span>
@@ -688,17 +694,31 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         </div>
       </div>
 
-      <!-- PRICE RANGE -->
+      <!-- PRICE RANGE SLIDER -->
       <div class="filter-group">
         <div class="fg-head" onclick="toggleFilterGroup(this)">
           <span>Price</span><span class="fg-arrow">−</span>
         </div>
-        <div class="fg-body">
-          <label class="fopt"><input type="radio" name="f-price" value="all" checked onchange="renderProducts()"> All Prices</label>
-          <label class="fopt"><input type="radio" name="f-price" value="0-500" onchange="renderProducts()"> Under Rs 500</label>
-          <label class="fopt"><input type="radio" name="f-price" value="500-1000" onchange="renderProducts()"> Rs 500 – 1,000</label>
-          <label class="fopt"><input type="radio" name="f-price" value="1000-2500" onchange="renderProducts()"> Rs 1,000 – 2,500</label>
-          <label class="fopt"><input type="radio" name="f-price" value="2500+" onchange="renderProducts()"> Rs 2,500+</label>
+        <div class="fg-body" style="padding:0.4rem 0.2rem 0.8rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem">
+            <div style="font-family:var(--f-num);font-size:0.95rem;color:var(--dark)">Rs <span id="price-min-lbl">0</span></div>
+            <div style="font-family:var(--f-ui);font-size:0.55rem;color:var(--muted2);letter-spacing:0.1em">TO</div>
+            <div style="font-family:var(--f-num);font-size:0.95rem;color:var(--dark)">Rs <span id="price-max-lbl">10,000</span></div>
+          </div>
+          <div class="price-slider-wrap" id="price-slider-wrap">
+            <div class="price-track" id="price-track"></div>
+            <div class="price-range-fill" id="price-range-fill"></div>
+            <input type="range" class="price-thumb" id="price-thumb-min"
+              min="0" max="10000" value="0" step="50"
+              oninput="onPriceSlider()">
+            <input type="range" class="price-thumb" id="price-thumb-max"
+              min="0" max="10000" value="10000" step="50"
+              oninput="onPriceSlider()">
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:var(--f-ui);font-size:0.52rem;color:var(--muted2);margin-top:0.5rem;letter-spacing:0.05em">
+            <span>Rs 0</span><span>Rs 5,000</span><span>Rs 10,000+</span>
+          </div>
+          <button id="price-reset-btn" onclick="resetPriceSlider()" style="display:none;margin-top:0.7rem;background:none;border:1px solid var(--border2);color:var(--muted);padding:0.3rem 0.7rem;font-family:var(--f-ui);font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer;font-weight:400;width:100%">✕ Clear Price Filter</button>
         </div>
       </div>
 
@@ -970,8 +990,12 @@ function showCatalog(navKey) {
   setNavActive(navKey);
   // Clear all filter checkboxes when switching category
   document.querySelectorAll('.filter-sidebar input[type="checkbox"]').forEach(cb => cb.checked = false);
-  var priceAll = document.querySelector('input[name="f-price"][value="all"]');
-  if (priceAll) priceAll.checked = true;
+  // Reset price slider
+  var thumbMin = document.getElementById('price-thumb-min');
+  var thumbMax = document.getElementById('price-thumb-max');
+  if (thumbMin) thumbMin.value = 0;
+  if (thumbMax) thumbMax.value = 10000;
+  updatePriceSliderUI();
   buildFilterSidebar();
   renderProducts();
   window.scrollTo(0,0);
@@ -1136,155 +1160,6 @@ function analyzeColorsForCategory(products, done) {
 }
 
 // ===== QR SCANNER (scan product tags) =====
-function openQRScanner() {
-  var modal = document.getElementById('qr-over');
-  if (modal) { modal.classList.add('show'); startQRScan(); return; }
-  // Modal not in HTML yet - just trigger file input as fallback
-  document.getElementById('qr-input').click();
-}
-function closeQRScanner() {
-  var modal = document.getElementById('qr-over');
-  if (modal) modal.classList.remove('show');
-  stopQRScan();
-}
-
-var _scannerRunning = false;
-
-function startQRScan() {
-  var msgEl = document.getElementById('qr-msg');
-
-  if (typeof Quagga === 'undefined') {
-    msgEl.textContent = 'Scanner loading... please wait.';
-    setTimeout(startQRScan, 800);
-    return;
-  }
-  if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia) {
-    msgEl.innerHTML = 'Camera not supported.<br><strong>Use "Upload Photo Instead" below.</strong>';
-    return;
-  }
-  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-    msgEl.innerHTML = 'Camera needs HTTPS.<br><strong>Use "Upload Photo Instead" below.</strong>';
-    return;
-  }
-
-  msgEl.textContent = 'Starting camera...';
-  if (_scannerRunning) { try { Quagga.stop(); } catch(e){} _scannerRunning = false; }
-
-  Quagga.init({
-    inputStream: {
-      name: 'Live',
-      type: 'LiveStream',
-      target: document.getElementById('qr-video-wrap'),
-      constraints: {
-        facingMode: 'environment',
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
-    },
-    locator: { patchSize: 'medium', halfSample: true },
-    numOfWorkers: 0,
-    frequency: 10,
-    decoder: {
-      readers: [
-        'code_128_reader',
-        'code_39_reader',
-        'ean_reader',
-        'ean_8_reader',
-        'upc_reader',
-        'codabar_reader'
-      ]
-    },
-    locate: true
-  }, function(err) {
-    if (err) {
-      var reason = '';
-      if (err.name === 'NotAllowedError') reason = 'Camera permission denied. Please allow camera access.';
-      else if (err.name === 'NotFoundError') reason = 'No camera found on this device.';
-      else if (err.name === 'NotReadableError') reason = 'Camera in use by another app. Close other apps and retry.';
-      else reason = 'Camera error: ' + (err.message || err.name || 'unknown');
-      msgEl.innerHTML = reason + '<br><strong>Use "Upload Photo Instead" below.</strong>';
-      return;
-    }
-    _scannerRunning = true;
-    Quagga.start();
-    msgEl.textContent = 'Point camera at the barcode on your product tag';
-  });
-
-  // Listen for detected barcodes
-  Quagga.offDetected(); // remove old listeners
-  Quagga.onDetected(function(result) {
-    var code = result && result.codeResult && result.codeResult.code;
-    if (code) onQRDetected(code);
-  });
-}
-
-function stopQRScan() {
-  if (_scannerRunning) {
-    try { Quagga.stop(); } catch(e) {}
-    _scannerRunning = false;
-  }
-  // Clear video wrap
-  var wrap = document.getElementById('qr-video-wrap');
-  if (wrap) wrap.innerHTML = '';
-}
-
-function onQRDetected(raw) {
-  stopQRScan();
-  var sku = String(raw).trim().toUpperCase();
-  var product = PRODUCTS.find(function(p){ return p.sku.toUpperCase() === sku; });
-  // Also try partial match in case prefix/suffix noise
-  if (!product) {
-    var match = raw.match(/TTH[-][A-Z0-9_-]+/i);
-    if (match) {
-      var s = match[0].toUpperCase();
-      product = PRODUCTS.find(function(p){ return p.sku.toUpperCase() === s; });
-    }
-  }
-  if (product) {
-    closeQRScanner();
-    showCatalog(product.cat);
-    setTimeout(function(){
-      var card = document.getElementById('pc-' + product.sku.replace(/[^a-z0-9]/gi,'-'));
-      if (card) {
-        card.scrollIntoView({behavior:'smooth', block:'center'});
-        card.style.outline = '3px solid #8B6F1F';
-        setTimeout(function(){ card.style.outline = ''; }, 2500);
-      }
-      addItem(product.sku);
-    }, 400);
-  } else {
-    var msgEl = document.getElementById('qr-msg');
-    if (msgEl) msgEl.textContent = 'Scanned: "' + sku.slice(0,25) + '" — not found. Try again.';
-    setTimeout(startQRScan, 2000);
-  }
-}
-
-function onQRImagePick(event) {
-  var file = event.target.files && event.target.files[0];
-  if (!file) return;
-  if (typeof Quagga === 'undefined') {
-    alert('Scanner still loading. Please wait a moment and try again.');
-    return;
-  }
-  var msgEl = document.getElementById('qr-msg');
-  if (msgEl) msgEl.textContent = 'Reading barcode from image...';
-  var url = URL.createObjectURL(file);
-  Quagga.decodeSingle({
-    decoder: {
-      readers: ['code_128_reader','code_39_reader','ean_reader','ean_8_reader','upc_reader','codabar_reader']
-    },
-    locate: true,
-    src: url
-  }, function(result) {
-    URL.revokeObjectURL(url);
-    if (result && result.codeResult && result.codeResult.code) {
-      onQRDetected(result.codeResult.code);
-    } else {
-      if (msgEl) msgEl.textContent = 'No barcode found in image. Try a clearer photo — hold steady, good light, barcode fully in frame.';
-    }
-  });
-  event.target.value = '';
-}
 
 
 // ===== BULK EXCEL/CSV IMPORT =====
@@ -1432,10 +1307,10 @@ function shareFilteredOnWhatsApp() {
   var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
   var pageURL = window.location.origin + window.location.pathname;
   var filterDesc = [];
-  var pr = document.querySelector('input[name="f-price"]:checked');
-  if (pr && pr.value !== 'all') {
-    var prLabels = {'0-500':'Under Rs 500','500-1000':'Rs 500-1,000','1000-2500':'Rs 1,000-2,500','2500+':'Rs 2,500+'};
-    filterDesc.push(prLabels[pr.value]||pr.value);
+  var prMin2 = parseInt(document.getElementById('price-thumb-min')?.value || 0);
+  var prMax2 = parseInt(document.getElementById('price-thumb-max')?.value || 10000);
+  if (prMin2 > 0 || prMax2 < 10000) {
+    filterDesc.push('Rs ' + prMin2.toLocaleString('en-IN') + '–' + (prMax2 >= 10000 ? '10,000+' : prMax2.toLocaleString('en-IN')));
   }
   ['f-material','f-style','f-color'].forEach(function(name){
     var checked = Array.from(document.querySelectorAll('input[name="'+name+'"]:checked')).map(function(i){return i.value;});
@@ -1473,8 +1348,12 @@ function getFiltered() {
   const cats = getCatsForNav(activeCat);
   let list = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
   if (searchQ) {
-    const q = searchQ.toLowerCase();
-    list = list.filter(p => p.sku.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
+    const q = searchQ.toLowerCase().replace(/[-_\s]/g, ''); // strip dashes/spaces for flexible match
+    list = list.filter(p => {
+      const skuClean = p.sku.toLowerCase().replace(/[-_\s]/g, '');
+      const catClean = p.cat.toLowerCase();
+      return skuClean.includes(q) || p.sku.toLowerCase().includes(searchQ.toLowerCase()) || catClean.includes(q);
+    });
   }
   // Stock filter — uses TOTAL available (ready + made-to-order)
   const sf = document.getElementById('stock-sel')?.value || 'all';
@@ -1485,12 +1364,12 @@ function getFiltered() {
     if (!isNaN(minQty)) list = list.filter(p => totalAvail(p) >= minQty);
   }
 
-  // Price range filter
-  const pr = document.querySelector('input[name="f-price"]:checked')?.value || 'all';
-  if (pr === '0-500') list = list.filter(p => p.mrp < 500);
-  else if (pr === '500-1000') list = list.filter(p => p.mrp >= 500 && p.mrp < 1000);
-  else if (pr === '1000-2500') list = list.filter(p => p.mrp >= 1000 && p.mrp < 2500);
-  else if (pr === '2500+') list = list.filter(p => p.mrp >= 2500);
+  // Price range filter — slider based
+  var prMin = parseInt(document.getElementById('price-thumb-min')?.value || 0, 10);
+  var prMax = parseInt(document.getElementById('price-thumb-max')?.value || 10000, 10);
+  if (prMin > 0 || prMax < 10000) {
+    list = list.filter(function(p){ return p.mrp >= prMin && p.mrp <= prMax; });
+  }
 
   // Material filter (checkboxes — multi-select)
   const matChecked = Array.from(document.querySelectorAll('input[name="f-material"]:checked')).map(i=>i.value);
@@ -1580,8 +1459,64 @@ function buildFilterSidebar() {
 
 function clearFilters() {
   document.querySelectorAll('.filter-sidebar input[type="checkbox"]').forEach(cb => cb.checked = false);
-  document.querySelector('input[name="f-price"][value="all"]').checked = true;
+  resetPriceSlider();
   renderProducts();
+}
+
+// ===== PRICE SLIDER =====
+function updatePriceSliderUI() {
+  var minThumb = document.getElementById('price-thumb-min');
+  var maxThumb = document.getElementById('price-thumb-max');
+  var fill = document.getElementById('price-range-fill');
+  var minLbl = document.getElementById('price-min-lbl');
+  var maxLbl = document.getElementById('price-max-lbl');
+  var resetBtn = document.getElementById('price-reset-btn');
+  if (!minThumb || !maxThumb) return;
+  var min = parseInt(minThumb.value, 10);
+  var max = parseInt(maxThumb.value, 10);
+  var sliderMax = parseInt(minThumb.max, 10) || 10000;
+  if (min > max - 50) {
+    if (document.activeElement === minThumb) { min = max - 50; minThumb.value = min; }
+    else { max = min + 50; maxThumb.value = max; }
+  }
+  if (minLbl) minLbl.textContent = min.toLocaleString('en-IN');
+  if (maxLbl) maxLbl.textContent = max >= sliderMax ? sliderMax.toLocaleString('en-IN')+'+' : max.toLocaleString('en-IN');
+  if (fill) {
+    var lp = (min / sliderMax) * 100;
+    var rp = (max / sliderMax) * 100;
+    fill.style.left = lp + '%';
+    fill.style.width = (rp - lp) + '%';
+  }
+  if (resetBtn) resetBtn.style.display = (min > 0 || max < sliderMax) ? 'block' : 'none';
+}
+
+function onPriceSlider() {
+  updatePriceSliderUI();
+  renderProducts();
+}
+
+function resetPriceSlider() {
+  var minThumb = document.getElementById('price-thumb-min');
+  var maxThumb = document.getElementById('price-thumb-max');
+  if (minThumb) minThumb.value = 0;
+  if (maxThumb) maxThumb.value = parseInt(maxThumb.max, 10) || 10000;
+  updatePriceSliderUI();
+  renderProducts();
+}
+
+function initPriceSlider() {
+  if (!PRODUCTS.length) return;
+  var maxPrice = Math.max.apply(null, PRODUCTS.map(function(p){ return p.mrp || 0; }));
+  var roundedMax = Math.ceil(maxPrice / 500) * 500;
+  roundedMax = Math.max(roundedMax, 1000);
+  var minThumb = document.getElementById('price-thumb-min');
+  var maxThumb = document.getElementById('price-thumb-max');
+  if (!minThumb || !maxThumb) return;
+  minThumb.max = roundedMax;
+  maxThumb.max = roundedMax;
+  maxThumb.value = roundedMax;
+  minThumb.value = 0;
+  updatePriceSliderUI();
 }
 
 function toggleFilterGroup(headEl) {
@@ -1608,10 +1543,12 @@ function closeMobileFilters() {
 
 function renderActiveFilters() {
   const chips = [];
-  const pr = document.querySelector('input[name="f-price"]:checked')?.value || 'all';
-  if (pr !== 'all') {
-    const labels = {'0-500':'Under Rs 500', '500-1000':'Rs 500-1,000', '1000-2500':'Rs 1,000-2,500', '2500+':'Rs 2,500+'};
-    chips.push({type:'price', value:'all', label:labels[pr], reset:()=>{document.querySelector('input[name="f-price"][value="all"]').checked=true}});
+  // Price slider chip
+  var prMin = parseInt(document.getElementById('price-thumb-min')?.value || 0, 10);
+  var prMax = parseInt(document.getElementById('price-thumb-max')?.value || 10000, 10);
+  if (prMin > 0 || prMax < 10000) {
+    var prLabel = 'Rs ' + prMin.toLocaleString('en-IN') + ' – Rs ' + (prMax >= 10000 ? '10,000+' : prMax.toLocaleString('en-IN'));
+    chips.push({type:'price', label:prLabel, reset: function(){ resetPriceSlider(); }});
   }
   document.querySelectorAll('input[name="f-material"]:checked').forEach(cb => {
     chips.push({type:'material', value:cb.value, label:cb.value, el:cb});
@@ -1697,11 +1634,69 @@ function cardHTML(p) {
 }
 
 function onSearch() {
-  searchQ = document.getElementById('search').value;
+  searchQ = document.getElementById('search').value.trim();
   displayLimit = 80;
+
+  // Quick result: show instantly when input matches a SKU exactly (case-insensitive, dashes flexible)
+  var qr = document.getElementById('search-quickresult');
+  var stripped = searchQ.replace(/[-_\s]/g,'').toUpperCase();
+  var exactMatch = PRODUCTS.find(function(p){
+    return p.sku.toUpperCase() === searchQ.toUpperCase() ||
+           p.sku.replace(/[-_\s]/g,'').toUpperCase() === stripped;
+  });
+  if (exactMatch && searchQ.length >= 4) {
+    var qty = cart[exactMatch.sku] || 0;
+    var ready = readyStock(exactMatch), raw = rawStock(exactMatch), total = ready + raw;
+    var stockTxt = raw > 0 ? ready + ' ready + ' + raw + ' MTO' : ready + ' in stock';
+    var oos = total === 0;
+    qr.style.display = 'block';
+    qr.innerHTML =
+      '<div style="display:flex;align-items:center;gap:0.8rem">'
+      + (exactMatch.img ? '<img src="'+exactMatch.img+'" style="width:52px;height:52px;object-fit:contain;border:1px solid var(--border);background:var(--cream);flex-shrink:0">' : '')
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.15em;color:var(--gold);font-weight:600">'+exactMatch.sku+'</div>'
+      + '<div style="font-family:var(--f-display);font-size:1rem;color:var(--dark);margin:1px 0">'+exactMatch.cat+'</div>'
+      + '<div style="font-family:var(--f-num);font-size:1.05rem;color:var(--dark)">Rs '+exactMatch.mrp.toLocaleString('en-IN')+'</div>'
+      + '<div style="font-family:var(--f-ui);font-size:0.6rem;color:var(--muted2);margin-top:1px">'+stockTxt+'</div>'
+      + '</div>'
+      + (oos
+        ? '<span style="font-family:var(--f-ui);font-size:0.6rem;color:#999;letter-spacing:0.1em">OUT OF STOCK</span>'
+        : qty === 0
+          ? '<button onclick="addItem(\''+exactMatch.sku+'\');document.getElementById(\'search-quickresult\').style.display=\'none\'" style="background:var(--dark);color:var(--cream);border:none;padding:0.55rem 1rem;font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer;white-space:nowrap;font-weight:500">+ Add</button>'
+          : '<div style="display:flex;align-items:center;gap:6px"><button onclick="changeQty(\''+exactMatch.sku+'\',-1)" style="background:var(--cream2);border:1px solid var(--border2);color:var(--ink);width:28px;height:28px;cursor:pointer;font-size:1rem">−</button><span style="font-family:var(--f-num);font-size:1rem;min-width:20px;text-align:center">'+qty+'</span><button onclick="changeQty(\''+exactMatch.sku+'\',1)" style="background:var(--dark);color:var(--cream);border:none;width:28px;height:28px;cursor:pointer;font-size:1rem">+</button></div>'
+      )
+      + '</div>';
+  } else {
+    qr.style.display = 'none';
+  }
+
   if (searchQ && document.getElementById('page-home').style.display !== 'none') showCatalog('ALL');
   else renderProducts();
+
+  // If exactly 1 result → auto-jump and highlight
+  if (searchQ.length >= 3) {
+    setTimeout(function(){
+      var results = getFiltered();
+      if (results.length === 1) {
+        var p = results[0];
+        var card = document.getElementById('pc-' + p.sku.replace(/[^a-z0-9]/gi,'-'));
+        if (card) {
+          card.scrollIntoView({behavior:'smooth', block:'center'});
+          card.style.outline = '3px solid #8B6F1F';
+          card.style.transition = 'outline 0.3s';
+          setTimeout(function(){ card.style.outline = ''; }, 3000);
+        }
+      }
+    }, 150);
+  }
 }
+
+// Close quick result when clicking outside search
+document.addEventListener('click', function(e){
+  var sw = document.querySelector('.search-wrap');
+  var qr = document.getElementById('search-quickresult');
+  if (qr && sw && !sw.contains(e.target)) qr.style.display = 'none';
+});
 
 function loadMore() { displayLimit += 80; renderProducts(); }
 
@@ -1713,10 +1708,10 @@ function exportCatalogPDF() {
   // Build active filter description for the header
   var filterDesc = [];
   var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
-  var pr = document.querySelector('input[name="f-price"]:checked');
-  if (pr && pr.value !== 'all') {
-    var prLabels = {'0-500':'Under Rs 500','500-1000':'Rs 500-1,000','1000-2500':'Rs 1,000-2,500','2500+':'Rs 2,500+'};
-    filterDesc.push('Price: ' + (prLabels[pr.value]||pr.value));
+  var prMin3 = parseInt(document.getElementById('price-thumb-min')?.value || 0);
+  var prMax3 = parseInt(document.getElementById('price-thumb-max')?.value || 10000);
+  if (prMin3 > 0 || prMax3 < 10000) {
+    filterDesc.push('Price: Rs ' + prMin3.toLocaleString('en-IN') + ' – Rs ' + (prMax3 >= 10000 ? '10,000+' : prMax3.toLocaleString('en-IN')));
   }
   ['f-material','f-style','f-color','f-pattern'].forEach(function(name){
     var checked = Array.from(document.querySelectorAll('input[name="'+name+'"]:checked')).map(function(i){return i.value;});
@@ -2572,6 +2567,7 @@ function loadDataFromBackend() {
     // Refresh the page UI
     buildHome();
     buildAccDropdown();
+    initPriceSlider();
     if (typeof renderProducts === 'function') renderProducts();
   }).catch(function(err){
     console.error('Failed to load data from backend:', err);
@@ -2662,26 +2658,6 @@ buildAccDropdown();
   <div class="lb-sku" id="lb-sku"></div>
 </div>
 
-<!-- ===== QR SCANNER MODAL ===== -->
-<div class="cm-over" id="qr-over">
-  <div class="cm-box" style="max-width:520px">
-    <div class="cm-hdr">
-      <div class="cm-title">Scan <em>Product</em></div>
-      <button class="cm-close" onclick="closeQRScanner()">&times;</button>
-    </div>
-    <div style="padding:1.2rem 2rem;background:var(--cream);text-align:center">
-      <div id="qr-video-wrap" style="position:relative;background:#000;width:100%;max-width:340px;height:260px;margin:0 auto;overflow:hidden">
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#555;font-size:0.8rem;font-family:sans-serif;z-index:0">Camera loading...</div>
-      </div>
-      <div id="qr-msg" style="font-family:var(--f-body);font-size:0.95rem;color:var(--ink);margin-top:1rem;font-style:italic;line-height:1.5">Starting scanner...</div>
-      <div style="margin-top:1rem;display:flex;gap:0.6rem;justify-content:center;flex-wrap:wrap">
-        <button onclick="document.getElementById('qr-input').click()" style="background:var(--cream2);border:1px solid var(--border2);color:var(--ink);padding:0.55rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;font-weight:500">⬆ Upload Photo Instead</button>
-      </div>
-    </div>
-    <div class="cm-disclaimer">Scans barcodes and QR codes containing your product SKU · Auto-adds to cart and jumps to product</div>
-  </div>
-</div>
-<input type="file" id="qr-input" accept="image/*" style="display:none" onchange="onQRImagePick(event)">
 <input type="file" id="bulk-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="onBulkFilePicked(event)">
 
 <!-- ===== ORDER CONFIRMATION MODAL ===== -->
