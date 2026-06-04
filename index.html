@@ -700,11 +700,29 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
           <span>Price</span><span class="fg-arrow">−</span>
         </div>
         <div class="fg-body" style="padding:0.4rem 0.2rem 0.8rem">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem">
-            <div style="font-family:var(--f-num);font-size:0.95rem;color:var(--dark)">Rs <span id="price-min-lbl">0</span></div>
-            <div style="font-family:var(--f-ui);font-size:0.55rem;color:var(--muted2);letter-spacing:0.1em">TO</div>
-            <div style="font-family:var(--f-num);font-size:0.95rem;color:var(--dark)">Rs <span id="price-max-lbl">10,000</span></div>
+          <!-- Type-in inputs -->
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.9rem">
+            <div style="flex:1">
+              <div style="font-family:var(--f-ui);font-size:0.5rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted2);margin-bottom:3px">From</div>
+              <div style="display:flex;align-items:center;background:var(--white);border:1px solid var(--border);padding:0.35rem 0.5rem;gap:3px">
+                <span style="font-family:var(--f-ui);font-size:0.65rem;color:var(--muted2)">Rs</span>
+                <input type="number" id="price-input-min" min="0" step="50" placeholder="0"
+                  style="border:none;outline:none;background:transparent;font-family:var(--f-num);font-size:0.9rem;color:var(--dark);width:100%;min-width:0"
+                  oninput="onPriceInput()" onblur="onPriceInputBlur()">
+              </div>
+            </div>
+            <div style="font-family:var(--f-ui);font-size:0.55rem;color:var(--muted2);letter-spacing:0.1em;padding-top:1.1rem">—</div>
+            <div style="flex:1">
+              <div style="font-family:var(--f-ui);font-size:0.5rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted2);margin-bottom:3px">To</div>
+              <div style="display:flex;align-items:center;background:var(--white);border:1px solid var(--border);padding:0.35rem 0.5rem;gap:3px">
+                <span style="font-family:var(--f-ui);font-size:0.65rem;color:var(--muted2)">Rs</span>
+                <input type="number" id="price-input-max" min="0" step="50" placeholder="Max"
+                  style="border:none;outline:none;background:transparent;font-family:var(--f-num);font-size:0.9rem;color:var(--dark);width:100%;min-width:0"
+                  oninput="onPriceInput()" onblur="onPriceInputBlur()">
+              </div>
+            </div>
           </div>
+          <!-- Slider -->
           <div class="price-slider-wrap" id="price-slider-wrap">
             <div class="price-track" id="price-track"></div>
             <div class="price-range-fill" id="price-range-fill"></div>
@@ -716,7 +734,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
               oninput="onPriceSlider()">
           </div>
           <div style="display:flex;justify-content:space-between;font-family:var(--f-ui);font-size:0.52rem;color:var(--muted2);margin-top:0.5rem;letter-spacing:0.05em">
-            <span>Rs 0</span><span>Rs 5,000</span><span>Rs 10,000+</span>
+            <span>Rs 0</span><span id="price-scale-mid">Rs 5,000</span><span id="price-scale-max">Rs 10,000+</span>
           </div>
           <button id="price-reset-btn" onclick="resetPriceSlider()" style="display:none;margin-top:0.7rem;background:none;border:1px solid var(--border2);color:var(--muted);padding:0.3rem 0.7rem;font-family:var(--f-ui);font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer;font-weight:400;width:100%">✕ Clear Price Filter</button>
         </div>
@@ -994,7 +1012,7 @@ function showCatalog(navKey) {
   var thumbMin = document.getElementById('price-thumb-min');
   var thumbMax = document.getElementById('price-thumb-max');
   if (thumbMin) thumbMin.value = 0;
-  if (thumbMax) thumbMax.value = 10000;
+  if (thumbMax) thumbMax.value = thumbMax.max || 10000;
   updatePriceSliderUI();
   buildFilterSidebar();
   renderProducts();
@@ -1307,9 +1325,12 @@ function shareFilteredOnWhatsApp() {
   var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
   var pageURL = window.location.origin + window.location.pathname;
   var filterDesc = [];
-  var prMin2 = parseInt(document.getElementById('price-thumb-min')?.value || 0);
-  var prMax2 = parseInt(document.getElementById('price-thumb-max')?.value || 10000);
-  if (prMin2 > 0 || prMax2 < 10000) {
+  var prMinEl2 = document.getElementById('price-thumb-min');
+  var prMaxEl2 = document.getElementById('price-thumb-max');
+  var prMin2 = parseInt(prMinEl2?.value || 0);
+  var prMax2 = parseInt(prMaxEl2?.value || 99999);
+  var prSliderMax2 = parseInt(prMaxEl2?.max || 99999);
+  if (prMin2 > 0 || prMax2 < prSliderMax2) {
     filterDesc.push('Rs ' + prMin2.toLocaleString('en-IN') + '–' + (prMax2 >= 10000 ? '10,000+' : prMax2.toLocaleString('en-IN')));
   }
   ['f-material','f-style','f-color'].forEach(function(name){
@@ -1365,9 +1386,13 @@ function getFiltered() {
   }
 
   // Price range filter — slider based
-  var prMin = parseInt(document.getElementById('price-thumb-min')?.value || 0, 10);
-  var prMax = parseInt(document.getElementById('price-thumb-max')?.value || 10000, 10);
-  if (prMin > 0 || prMax < 10000) {
+  var prMinEl = document.getElementById('price-thumb-min');
+  var prMaxEl = document.getElementById('price-thumb-max');
+  var prMin = parseInt(prMinEl?.value || 0, 10);
+  var prMax = parseInt(prMaxEl?.value || 99999, 10);
+  var prSliderMax = parseInt(prMaxEl?.max || 99999, 10);
+  // Only filter if user has actually moved a handle away from default
+  if (prMin > 0 || prMax < prSliderMax) {
     list = list.filter(function(p){ return p.mrp >= prMin && p.mrp <= prMax; });
   }
 
@@ -1468,26 +1493,84 @@ function updatePriceSliderUI() {
   var minThumb = document.getElementById('price-thumb-min');
   var maxThumb = document.getElementById('price-thumb-max');
   var fill = document.getElementById('price-range-fill');
-  var minLbl = document.getElementById('price-min-lbl');
-  var maxLbl = document.getElementById('price-max-lbl');
   var resetBtn = document.getElementById('price-reset-btn');
+  var minInput = document.getElementById('price-input-min');
+  var maxInput = document.getElementById('price-input-max');
   if (!minThumb || !maxThumb) return;
+
   var min = parseInt(minThumb.value, 10);
   var max = parseInt(maxThumb.value, 10);
   var sliderMax = parseInt(minThumb.max, 10) || 10000;
+
+  // Prevent handles crossing
   if (min > max - 50) {
     if (document.activeElement === minThumb) { min = max - 50; minThumb.value = min; }
     else { max = min + 50; maxThumb.value = max; }
   }
-  if (minLbl) minLbl.textContent = min.toLocaleString('en-IN');
-  if (maxLbl) maxLbl.textContent = max >= sliderMax ? sliderMax.toLocaleString('en-IN')+'+' : max.toLocaleString('en-IN');
+
+  // Sync type-in inputs (only if not currently focused — don't interrupt typing)
+  if (minInput && document.activeElement !== minInput) minInput.value = min > 0 ? min : '';
+  if (maxInput && document.activeElement !== maxInput) maxInput.value = max < sliderMax ? max : '';
+
+  // Highlight input borders when active
+  if (minInput) minInput.parentElement.style.borderColor = min > 0 ? 'var(--gold)' : 'var(--border)';
+  if (maxInput) maxInput.parentElement.style.borderColor = max < sliderMax ? 'var(--gold)' : 'var(--border)';
+
+  // Update fill bar
   if (fill) {
     var lp = (min / sliderMax) * 100;
     var rp = (max / sliderMax) * 100;
     fill.style.left = lp + '%';
     fill.style.width = (rp - lp) + '%';
   }
+
+  // Show/hide reset button
   if (resetBtn) resetBtn.style.display = (min > 0 || max < sliderMax) ? 'block' : 'none';
+}
+
+// When user types in the From/To inputs
+function onPriceInput() {
+  var minThumb = document.getElementById('price-thumb-min');
+  var maxThumb = document.getElementById('price-thumb-max');
+  var minInput = document.getElementById('price-input-min');
+  var maxInput = document.getElementById('price-input-max');
+  if (!minThumb || !maxThumb) return;
+  var sliderMax = parseInt(minThumb.max, 10) || 10000;
+
+  var typedMin = minInput && minInput.value !== '' ? parseInt(minInput.value, 10) : 0;
+  var typedMax = maxInput && maxInput.value !== '' ? parseInt(maxInput.value, 10) : sliderMax;
+
+  if (isNaN(typedMin)) typedMin = 0;
+  if (isNaN(typedMax)) typedMax = sliderMax;
+
+  // Clamp to slider range
+  typedMin = Math.max(0, Math.min(typedMin, sliderMax));
+  typedMax = Math.max(0, Math.min(typedMax, sliderMax));
+
+  minThumb.value = typedMin;
+  maxThumb.value = typedMax;
+  updatePriceSliderUI();
+  renderProducts();
+}
+
+// On blur, snap to nearest step and clean up
+function onPriceInputBlur() {
+  var minInput = document.getElementById('price-input-min');
+  var maxInput = document.getElementById('price-input-max');
+  var minThumb = document.getElementById('price-thumb-min');
+  var maxThumb = document.getElementById('price-thumb-max');
+  if (!minThumb || !maxThumb) return;
+  var sliderMax = parseInt(minThumb.max, 10) || 10000;
+  // Snap to step of 50
+  var min = Math.round(parseInt(minThumb.value, 10) / 50) * 50;
+  var max = Math.round(parseInt(maxThumb.value, 10) / 50) * 50;
+  if (min >= max) min = Math.max(0, max - 50);
+  minThumb.value = min;
+  maxThumb.value = max;
+  if (minInput) minInput.value = min > 0 ? min : '';
+  if (maxInput) maxInput.value = max < sliderMax ? max : '';
+  updatePriceSliderUI();
+  renderProducts();
 }
 
 function onPriceSlider() {
@@ -1499,7 +1582,11 @@ function resetPriceSlider() {
   var minThumb = document.getElementById('price-thumb-min');
   var maxThumb = document.getElementById('price-thumb-max');
   if (minThumb) minThumb.value = 0;
-  if (maxThumb) maxThumb.value = parseInt(maxThumb.max, 10) || 10000;
+  if (maxThumb) maxThumb.value = maxThumb.max;
+  var minInput = document.getElementById('price-input-min');
+  var maxInput = document.getElementById('price-input-max');
+  if (minInput) minInput.value = '';
+  if (maxInput) maxInput.value = '';
   updatePriceSliderUI();
   renderProducts();
 }
@@ -1511,11 +1598,19 @@ function initPriceSlider() {
   roundedMax = Math.max(roundedMax, 1000);
   var minThumb = document.getElementById('price-thumb-min');
   var maxThumb = document.getElementById('price-thumb-max');
+  var minInput = document.getElementById('price-input-min');
+  var maxInput = document.getElementById('price-input-max');
   if (!minThumb || !maxThumb) return;
-  minThumb.max = roundedMax;
-  maxThumb.max = roundedMax;
-  maxThumb.value = roundedMax;
-  minThumb.value = 0;
+  minThumb.min = 0; minThumb.max = roundedMax; minThumb.value = 0;
+  maxThumb.min = 0; maxThumb.max = roundedMax; maxThumb.value = roundedMax;
+  if (minInput) { minInput.max = roundedMax; minInput.value = ''; }
+  if (maxInput) { maxInput.max = roundedMax; maxInput.placeholder = roundedMax.toLocaleString('en-IN'); maxInput.value = ''; }
+  // Update scale labels
+  var mid = Math.round(roundedMax / 2 / 500) * 500;
+  var midEl = document.getElementById('price-scale-mid');
+  var maxEl = document.getElementById('price-scale-max');
+  if (midEl) midEl.textContent = 'Rs ' + mid.toLocaleString('en-IN');
+  if (maxEl) maxEl.textContent = 'Rs ' + roundedMax.toLocaleString('en-IN') + '+';
   updatePriceSliderUI();
 }
 
@@ -1544,9 +1639,12 @@ function closeMobileFilters() {
 function renderActiveFilters() {
   const chips = [];
   // Price slider chip
-  var prMin = parseInt(document.getElementById('price-thumb-min')?.value || 0, 10);
-  var prMax = parseInt(document.getElementById('price-thumb-max')?.value || 10000, 10);
-  if (prMin > 0 || prMax < 10000) {
+  var prMinEl0 = document.getElementById('price-thumb-min');
+  var prMaxEl0 = document.getElementById('price-thumb-max');
+  var prMin = parseInt(prMinEl0?.value || 0, 10);
+  var prMax = parseInt(prMaxEl0?.value || 99999, 10);
+  var prSliderMax0 = parseInt(prMaxEl0?.max || 99999, 10);
+  if (prMin > 0 || prMax < prSliderMax0) {
     var prLabel = 'Rs ' + prMin.toLocaleString('en-IN') + ' – Rs ' + (prMax >= 10000 ? '10,000+' : prMax.toLocaleString('en-IN'));
     chips.push({type:'price', label:prLabel, reset: function(){ resetPriceSlider(); }});
   }
@@ -1708,9 +1806,12 @@ function exportCatalogPDF() {
   // Build active filter description for the header
   var filterDesc = [];
   var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
-  var prMin3 = parseInt(document.getElementById('price-thumb-min')?.value || 0);
-  var prMax3 = parseInt(document.getElementById('price-thumb-max')?.value || 10000);
-  if (prMin3 > 0 || prMax3 < 10000) {
+  var prMinEl3 = document.getElementById('price-thumb-min');
+  var prMaxEl3 = document.getElementById('price-thumb-max');
+  var prMin3 = parseInt(prMinEl3?.value || 0);
+  var prMax3 = parseInt(prMaxEl3?.value || 99999);
+  var prSliderMax3 = parseInt(prMaxEl3?.max || 99999);
+  if (prMin3 > 0 || prMax3 < prSliderMax3) {
     filterDesc.push('Price: Rs ' + prMin3.toLocaleString('en-IN') + ' – Rs ' + (prMax3 >= 10000 ? '10,000+' : prMax3.toLocaleString('en-IN')));
   }
   ['f-material','f-style','f-color','f-pattern'].forEach(function(name){
