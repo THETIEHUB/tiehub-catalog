@@ -653,14 +653,15 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       🛒 &nbsp;Order
       <span class="order-badge" id="cart-count">0</span>
     </button>
-    <!-- Account info strip — shown after login, right of ORDER button -->
-    <div id="acct-strip" style="display:none;border-left:1px solid var(--border);padding-left:1rem;margin-left:0.3rem">
-      <div style="display:flex;flex-direction:column;gap:1px;cursor:pointer" onclick="showMyAccount()" title="My Account">
-        <div style="font-family:var(--f-ui);font-size:0.52rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);font-weight:500" id="acct-strip-company">—</div>
-        <div style="font-family:var(--f-ui);font-size:0.6rem;color:var(--ink);font-weight:400" id="acct-strip-gstin">—</div>
-        <div style="font-family:var(--f-ui);font-size:0.58rem;color:var(--muted2)" id="acct-strip-disc"></div>
-      </div>
-      <button onclick="doLogout()" title="Sign Out" style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:0.7rem;padding:2px 4px;margin-top:2px;display:block;transition:color 0.15s;font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.15em;text-transform:uppercase" onmouseover="this.style.color='#C0392B'" onmouseout="this.style.color=''">Sign Out</button>
+    <button class="acct-btn" id="acct-btn" onclick="showMyAccount()" style="display:none" title="My Account">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      My Account
+    </button>
+    <!-- Hidden strip elements kept for JS compatibility -->
+    <div id="acct-strip" style="display:none">
+      <span id="acct-strip-company"></span>
+      <span id="acct-strip-gstin"></span>
+      <span id="acct-strip-disc"></span>
     </div>
   </div>
 </header>
@@ -2674,28 +2675,9 @@ function doLogin() {
 }
 
 function activateUserSession(profile) {
-  // Show account strip with company name, GSTIN, discount
-  var strip = document.getElementById('acct-strip');
-  if (strip) {
-    strip.style.display = 'flex';
-    strip.style.alignItems = 'flex-start';
-    strip.style.flexDirection = 'column';
-    strip.style.gap = '0';
-  }
-  var companyEl = document.getElementById('acct-strip-company');
-  var gstinEl   = document.getElementById('acct-strip-gstin');
-  var discEl    = document.getElementById('acct-strip-disc');
-  if (companyEl) companyEl.textContent = profile.name || '—';
-  if (gstinEl)   gstinEl.textContent   = profile.gstin || '—';
-  if (discEl)    discEl.textContent    = profile.disc ? 'Discount: ' + profile.disc + '%' : '';
-
-  // Also keep old acct-btn in sync (used on mobile where strip is hidden)
+  // Just show the My Account button — no name display
   var btn = document.getElementById('acct-btn');
-  if (btn) {
-    btn.style.display = 'flex';
-    var nameEl = document.getElementById('acct-btn-name');
-    if (nameEl) nameEl.textContent = profile.name ? profile.name.split(' ')[0] : 'Account';
-  }
+  if (btn) btn.style.display = 'flex';
   // Auto-fill order form fields
   if (profile.name)  { var el = document.getElementById('f-shop');  if (el) el.value = fixMojibake(profile.name); }
   if (profile.gstin) { var el = document.getElementById('f-gst');   if (el) el.value = profile.gstin; }
@@ -2730,11 +2712,11 @@ function doLogout() {
   if (!confirm('Sign out of The Tie Hub catalog?')) return;
   LOGGED_IN_PROFILE = null;
   try { sessionStorage.removeItem('tth_profile'); } catch(e) {}
-  // Hide account strip and button
-  var strip = document.getElementById('acct-strip');
-  if (strip) strip.style.display = 'none';
+  // Hide account button
   var btn = document.getElementById('acct-btn');
   if (btn) btn.style.display = 'none';
+  var strip = document.getElementById('acct-strip');
+  if (strip) strip.style.display = 'none';
   // Show login screen
   var ls = document.getElementById('login-screen');
   if (ls) { ls.style.opacity = '1'; ls.style.display = 'flex'; }
