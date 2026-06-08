@@ -3097,25 +3097,30 @@ function loadOrderHistory(gstin) {
 
 // Check session on page load
 (function checkAuth() {
-  // Employee session first
+  // Clear any stale sessions that might conflict
+  // Employee session takes priority
   var empProfile = null;
   try { var se = sessionStorage.getItem('tth_emp'); if (se) empProfile = JSON.parse(se); } catch(e) {}
-  if (empProfile) {
+  if (empProfile && empProfile.role) {
     EMP_PROFILE = empProfile;
+    // Clear customer session to avoid conflict
+    try { sessionStorage.removeItem('tth_profile'); } catch(e) {}
     var ls = document.getElementById('login-screen');
     if (ls) ls.style.display = 'none';
     showEmpDashboard(empProfile);
     return;
   }
-  // Customer session
+  // Customer session — only if no employee session
   var profile = null;
   try { var s = sessionStorage.getItem('tth_profile'); if (s) profile = JSON.parse(s); } catch(e) {}
-  if (profile) {
+  if (profile && profile.gstin !== undefined) {
     LOGGED_IN_PROFILE = profile;
     var ls = document.getElementById('login-screen');
     if (ls) ls.style.display = 'none';
     activateUserSession(profile);
   } else {
+    // No valid session — clear everything and show login
+    try { sessionStorage.removeItem('tth_profile'); sessionStorage.removeItem('tth_emp'); } catch(e) {}
     setTimeout(function(){ var inp = document.getElementById('login-user'); if (inp) inp.focus(); }, 100);
   }
 })();
