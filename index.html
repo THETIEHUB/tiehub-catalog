@@ -3012,23 +3012,32 @@ function empDispatch(po) {
 
 function doLogout() {
   if (!confirm('Sign out of The Tie Hub catalog?')) return;
+  // Clear both session types
   LOGGED_IN_PROFILE = null;
+  EMP_PROFILE = null;
   try { sessionStorage.removeItem('tth_profile'); } catch(e) {}
-  // Hide account button
+  try { sessionStorage.removeItem('tth_emp'); } catch(e) {}
+  // Restore nav for employees
+  var nav = document.querySelector('.mainnav');
+  var top = document.querySelector('.topbar');
+  if (nav) nav.style.display = '';
+  if (top) top.style.display = '';
+  // Hide account buttons
   var btn = document.getElementById('acct-btn');
   if (btn) btn.style.display = 'none';
   var strip = document.getElementById('acct-strip');
   if (strip) strip.style.display = 'none';
+  // Hide all pages
+  document.getElementById('page-home').style.display = 'none';
+  document.getElementById('page-catalog').style.display = 'none';
+  document.getElementById('page-account').style.display = 'none';
+  document.getElementById('page-emp').style.display = 'none';
   // Show login screen
   var ls = document.getElementById('login-screen');
   if (ls) { ls.style.opacity = '1'; ls.style.display = 'flex'; }
   document.getElementById('login-user').value = '';
   document.getElementById('login-pwd').value = '';
   document.getElementById('login-error').style.display = 'none';
-  // Hide pages
-  document.getElementById('page-home').style.display = 'none';
-  document.getElementById('page-catalog').style.display = 'none';
-  document.getElementById('page-account').style.display = 'none';
   setTimeout(function(){ document.getElementById('login-user').focus(); }, 100);
 }
 
