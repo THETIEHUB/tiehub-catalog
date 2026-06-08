@@ -132,7 +132,41 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .price-thumb::-webkit-slider-thumb:hover,.price-thumb:active::-webkit-slider-thumb{border-color:var(--gold2);transform:scale(1.15)}
 
 
-/* ===== LOGIN SCREEN ===== */
+/* ===== EMPLOYEE DASHBOARD ===== */
+.emp-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:0.6rem 1.2rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;font-weight:500;margin-bottom:-1px;transition:all 0.2s}
+.emp-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.emp-tab:hover{color:var(--ink)}
+.emp-filter-btn{background:var(--cream2);border:1px solid var(--border);color:var(--muted);padding:0.35rem 0.9rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer;font-weight:400;transition:all 0.15s}
+.emp-filter-btn.active{background:var(--dark);color:var(--cream);border-color:var(--dark)}
+.emp-filter-btn:hover{border-color:var(--gold);color:var(--gold)}
+.emp-loading{padding:2rem;text-align:center;font-family:var(--f-body);font-style:italic;color:var(--muted)}
+.order-card{background:var(--white);border:1px solid var(--border);margin-bottom:0.6rem;padding:1rem 1.3rem;display:grid;grid-template-columns:1fr auto;gap:0.8rem;align-items:start}
+.order-card:hover{border-color:var(--gold)}
+.oc-po{font-family:var(--f-ui);font-size:0.7rem;letter-spacing:0.1em;color:var(--gold);font-weight:600}
+.oc-shop{font-family:var(--f-display);font-size:1.1rem;color:var(--dark);margin:2px 0}
+.oc-meta{font-family:var(--f-ui);font-size:0.62rem;color:var(--muted);letter-spacing:0.04em}
+.oc-total{font-family:var(--f-num);font-size:1.2rem;color:var(--dark);text-align:right}
+.oc-status{display:inline-block;font-family:var(--f-ui);font-size:0.52rem;letter-spacing:0.15em;text-transform:uppercase;padding:3px 8px;font-weight:500;margin-top:4px}
+.st-received{background:#FEF3CD;color:#856404}
+.st-confirmed{background:#CCE5FF;color:#004085}
+.st-dispatched{background:#D4EDDA;color:#155724}
+.st-delivered{background:#D1ECF1;color:#0C5460}
+.oc-actions{display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.6rem}
+.oc-btn{font-family:var(--f-ui);font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;padding:0.4rem 0.8rem;border:1px solid var(--border2);background:var(--cream2);color:var(--ink);cursor:pointer;font-weight:500;transition:all 0.15s}
+.oc-btn:hover{background:var(--dark);color:var(--cream);border-color:var(--dark)}
+.oc-btn.primary{background:var(--dark);color:var(--cream);border-color:var(--dark)}
+.oc-btn.primary:hover{background:var(--gold);border-color:var(--gold)}
+.oc-btn.danger{border-color:#C0392B;color:#C0392B}
+.oc-btn.danger:hover{background:#C0392B;color:#fff}
+.cust-card{background:var(--white);border:1px solid var(--border);margin-bottom:0.5rem;padding:0.9rem 1.2rem;display:grid;grid-template-columns:1fr auto;gap:0.8rem;align-items:center}
+.cust-card:hover{border-color:var(--gold)}
+.cc-name{font-family:var(--f-display);font-size:1rem;color:var(--dark)}
+.cc-meta{font-family:var(--f-ui);font-size:0.62rem;color:var(--muted);margin-top:2px}
+.cc-disc{font-family:var(--f-ui);font-size:0.62rem;color:var(--gold);font-weight:600}
+@media(max-width:640px){
+  .order-card{grid-template-columns:1fr}
+  .cust-card{grid-template-columns:1fr}
+}
 #login-screen{position:fixed;inset:0;background:var(--cream);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1.5rem}
 .login-box{background:var(--white);max-width:420px;width:100%;border-top:3px solid var(--gold);box-shadow:0 20px 60px rgba(26,22,16,0.12)}
 .login-brand{background:var(--dark);padding:2rem 2.5rem 1.6rem;text-align:center}
@@ -771,7 +805,54 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
   </div>
 </div>
 
-<div id="page-catalog" style="display:none">
+<!-- ===== EMPLOYEE DASHBOARD PAGE ===== -->
+<div id="page-emp" style="display:none">
+  <div style="max-width:1100px;margin:0 auto;padding:2rem 1.5rem">
+
+    <!-- Emp header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:2rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.35em;text-transform:uppercase;color:var(--gold);margin-bottom:0.3rem" id="emp-role-lbl">Salesperson</div>
+        <div style="font-family:var(--f-display);font-size:1.8rem;font-weight:500;color:var(--dark)" id="emp-name-hdr">—</div>
+      </div>
+      <div style="display:flex;gap:0.7rem;align-items:center">
+        <div style="font-family:var(--f-ui);font-size:0.65rem;color:var(--muted);letter-spacing:0.05em" id="emp-stats-lbl"></div>
+        <button onclick="doLogout()" style="background:none;border:1px solid var(--border2);color:var(--muted);padding:0.5rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer">Sign Out</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;margin-bottom:1.5rem;border-bottom:1px solid var(--border)">
+      <button class="emp-tab active" id="etab-orders" onclick="switchEmpTab('orders')">Order Queue</button>
+      <button class="emp-tab" id="etab-customers" onclick="switchEmpTab('customers')">My Customers</button>
+    </div>
+
+    <!-- ORDER QUEUE TAB -->
+    <div id="emp-orders-tab">
+      <div style="display:flex;gap:0.7rem;margin-bottom:1rem;flex-wrap:wrap">
+        <button class="emp-filter-btn active" onclick="filterOrders('all',this)">All</button>
+        <button class="emp-filter-btn" onclick="filterOrders('Received',this)">Received</button>
+        <button class="emp-filter-btn" onclick="filterOrders('Confirmed',this)">Confirmed</button>
+        <button class="emp-filter-btn" onclick="filterOrders('Dispatched',this)">Dispatched</button>
+        <button class="emp-filter-btn" onclick="filterOrders('Delivered',this)">Delivered</button>
+      </div>
+      <div id="emp-orders-list">
+        <div class="emp-loading">Loading orders...</div>
+      </div>
+    </div>
+
+    <!-- CUSTOMERS TAB -->
+    <div id="emp-customers-tab" style="display:none">
+      <div style="margin-bottom:1rem">
+        <input id="cust-search-inp" type="text" placeholder="Search company, city, GSTIN..." oninput="filterCustomers()" style="width:100%;max-width:360px;background:var(--white);border:1px solid var(--border);color:var(--ink);padding:0.6rem 1rem;font-family:var(--f-ui);font-size:0.8rem;outline:none">
+      </div>
+      <div id="emp-customers-list">
+        <div class="emp-loading">Loading customers...</div>
+      </div>
+    </div>
+
+  </div>
+</div>
   <div class="cat-hero">
     <div>
       <div class="ch-eye">The Tie Hub Collection</div>
@@ -2631,8 +2712,8 @@ var BACKEND_TOKEN = 'TTH-2026-Mumbai-K9pQ7xR2vN5wL8mF';
 var LOGGED_IN_PROFILE = null; // stores profile after successful login
 
 function doLogin() {
-  var user = document.getElementById('login-user').value.trim().toLowerCase();
-  var pwd  = document.getElementById('login-pwd').value.trim();
+  var user  = document.getElementById('login-user').value.trim().toLowerCase();
+  var pwd   = document.getElementById('login-pwd').value.trim();
   var errEl = document.getElementById('login-error');
   var btn   = document.getElementById('login-btn');
   if (!user || !pwd) {
@@ -2643,32 +2724,45 @@ function doLogin() {
   btn.textContent = 'Signing in...';
   btn.disabled = true;
 
-  var url = BACKEND_URL + '?action=login&login_id=' + encodeURIComponent(user)
+  // Try employee login first, then customer login
+  var empUrl = BACKEND_URL + '?action=emp_login&login_id=' + encodeURIComponent(user)
     + '&pwd=' + encodeURIComponent(pwd)
     + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
 
-  fetch(url).then(function(r){ return r.json(); }).then(function(data) {
-    btn.textContent = 'Sign In →';
-    btn.disabled = false;
+  fetch(empUrl).then(function(r){ return r.json(); }).then(function(data){
     if (data.ok && data.profile) {
-      // Success
-      LOGGED_IN_PROFILE = data.profile;
-      try { sessionStorage.setItem('tth_profile', JSON.stringify(data.profile)); } catch(e) {}
+      // EMPLOYEE LOGIN SUCCESS
+      EMP_PROFILE = data.profile;
+      try { sessionStorage.setItem('tth_emp', JSON.stringify(data.profile)); } catch(e){}
       var ls = document.getElementById('login-screen');
-      ls.style.opacity = '0';
-      ls.style.transition = 'opacity 0.4s';
+      ls.style.opacity = '0'; ls.style.transition = 'opacity 0.4s';
       setTimeout(function(){ ls.style.display = 'none'; }, 400);
-      // Show account button with company name
-      activateUserSession(data.profile);
+      showEmpDashboard(data.profile);
     } else {
-      errEl.textContent = data.error || 'Invalid username or password.';
-      errEl.style.display = 'block';
-      document.getElementById('login-pwd').value = '';
-      document.getElementById('login-pwd').focus();
+      // Try customer login
+      var custUrl = BACKEND_URL + '?action=login&login_id=' + encodeURIComponent(user)
+        + '&pwd=' + encodeURIComponent(pwd)
+        + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+      return fetch(custUrl).then(function(r){ return r.json(); }).then(function(cdata){
+        btn.textContent = 'Sign In →'; btn.disabled = false;
+        if (cdata.ok && cdata.profile) {
+          // CUSTOMER LOGIN SUCCESS
+          LOGGED_IN_PROFILE = cdata.profile;
+          try { sessionStorage.setItem('tth_profile', JSON.stringify(cdata.profile)); } catch(e){}
+          var ls = document.getElementById('login-screen');
+          ls.style.opacity = '0'; ls.style.transition = 'opacity 0.4s';
+          setTimeout(function(){ ls.style.display = 'none'; }, 400);
+          activateUserSession(cdata.profile);
+        } else {
+          errEl.textContent = cdata.error || 'Invalid username or password.';
+          errEl.style.display = 'block';
+          document.getElementById('login-pwd').value = '';
+          document.getElementById('login-pwd').focus();
+        }
+      });
     }
-  }).catch(function() {
-    btn.textContent = 'Sign In →';
-    btn.disabled = false;
+  }).catch(function(){
+    btn.textContent = 'Sign In →'; btn.disabled = false;
     errEl.textContent = 'Connection error. Please check your internet and try again.';
     errEl.style.display = 'block';
   });
@@ -2706,6 +2800,214 @@ function toggleLoginPwd() {
   var btn = document.getElementById('login-eye-btn');
   if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
   else { inp.type = 'password'; btn.textContent = '👁'; }
+}
+
+// ===== EMPLOYEE SYSTEM =====
+var EMP_PROFILE = null;
+var EMP_DATA = { customers: [], orders: [] };
+var _orderFilter = 'all';
+
+function doEmpLogin(user, pwd) {
+  var errEl = document.getElementById('login-error');
+  var btn   = document.getElementById('login-btn');
+  btn.textContent = 'Signing in...';
+  btn.disabled = true;
+  var url = BACKEND_URL + '?action=emp_login&login_id=' + encodeURIComponent(user)
+    + '&pwd=' + encodeURIComponent(pwd)
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    btn.textContent = 'Sign In →';
+    btn.disabled = false;
+    if (data.ok && data.profile) {
+      EMP_PROFILE = data.profile;
+      try { sessionStorage.setItem('tth_emp', JSON.stringify(data.profile)); } catch(e){}
+      var ls = document.getElementById('login-screen');
+      ls.style.opacity = '0'; ls.style.transition = 'opacity 0.4s';
+      setTimeout(function(){ ls.style.display = 'none'; }, 400);
+      showEmpDashboard(data.profile);
+    } else {
+      errEl.textContent = data.error || 'Invalid username or password.';
+      errEl.style.display = 'block';
+      document.getElementById('login-pwd').value = '';
+      document.getElementById('login-pwd').focus();
+      btn.textContent = 'Sign In →';
+      btn.disabled = false;
+    }
+  }).catch(function(){
+    btn.textContent = 'Sign In →'; btn.disabled = false;
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block';
+  });
+}
+
+function showEmpDashboard(profile) {
+  // Hide all other pages
+  document.getElementById('page-home').style.display = 'none';
+  document.getElementById('page-catalog').style.display = 'none';
+  document.getElementById('page-account').style.display = 'none';
+  document.getElementById('page-emp').style.display = 'block';
+  window.scrollTo(0,0);
+
+  // Update header
+  var isManager = profile.role === 'manager';
+  document.getElementById('emp-name-hdr').textContent = profile.name || profile.login_id;
+  document.getElementById('emp-role-lbl').textContent = isManager ? 'Manager — Full Access' : 'Salesperson';
+
+  // Hide catalog nav for employees
+  document.querySelector('.mainnav') && (document.querySelector('.mainnav').style.display = 'none');
+  document.querySelector('.topbar')  && (document.querySelector('.topbar').style.display = 'none');
+
+  // Load dashboard data
+  loadEmpDashboard(profile);
+}
+
+function loadEmpDashboard(profile) {
+  var url = BACKEND_URL + '?action=emp_dashboard'
+    + '&emp_id='   + encodeURIComponent(profile.emp_id || '')
+    + '&emp_role=' + encodeURIComponent(profile.role || '')
+    + '&emp_name=' + encodeURIComponent(profile.name || '')
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+
+  document.getElementById('emp-orders-list').innerHTML = '<div class="emp-loading">Loading orders...</div>';
+  document.getElementById('emp-customers-list').innerHTML = '<div class="emp-loading">Loading customers...</div>';
+
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) {
+      document.getElementById('emp-orders-list').innerHTML = '<div class="emp-loading">Error: ' + (data.error||'Could not load') + '</div>';
+      return;
+    }
+    EMP_DATA = data;
+    document.getElementById('emp-stats-lbl').textContent =
+      data.customers.length + ' customers · ' + data.orders.length + ' orders';
+    renderEmpOrders();
+    renderEmpCustomers();
+  }).catch(function(){
+    document.getElementById('emp-orders-list').innerHTML = '<div class="emp-loading">Connection error. Please refresh.</div>';
+  });
+}
+
+function switchEmpTab(tab) {
+  document.getElementById('emp-orders-tab').style.display    = tab === 'orders'    ? 'block' : 'none';
+  document.getElementById('emp-customers-tab').style.display = tab === 'customers' ? 'block' : 'none';
+  document.getElementById('etab-orders').classList.toggle('active',    tab === 'orders');
+  document.getElementById('etab-customers').classList.toggle('active', tab === 'customers');
+}
+
+function filterOrders(status, btn) {
+  _orderFilter = status;
+  document.querySelectorAll('.emp-filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderEmpOrders();
+}
+
+function renderEmpOrders() {
+  var orders = EMP_DATA.orders || [];
+  if (_orderFilter !== 'all') {
+    orders = orders.filter(function(o){ return o.status.toLowerCase() === _orderFilter.toLowerCase(); });
+  }
+  if (!orders.length) {
+    document.getElementById('emp-orders-list').innerHTML = '<div class="emp-loading">No orders found.</div>';
+    return;
+  }
+  document.getElementById('emp-orders-list').innerHTML = orders.map(function(o){
+    var stClass = 'st-' + o.status.toLowerCase().replace(/\s/g,'-');
+    var dateStr = o.ts ? o.ts.split(' ')[0] : '—';
+    var actions = '';
+    var s = o.status.toLowerCase();
+    if (s === 'received') {
+      actions = '<button class="oc-btn primary" onclick="empAction(\'' + o.po + '\',\'Confirmed\')">✓ Confirm Order</button>'
+              + '<button class="oc-btn danger"  onclick="empAction(\'' + o.po + '\',\'Cancelled\')">✕ Cancel</button>';
+    } else if (s === 'confirmed') {
+      actions = '<button class="oc-btn primary" onclick="empDispatch(\'' + o.po + '\')">↗ Mark Dispatched</button>';
+    } else if (s === 'dispatched') {
+      actions = '<button class="oc-btn primary" onclick="empAction(\'' + o.po + '\',\'Delivered\')">✓ Mark Delivered</button>';
+    }
+    return '<div class="order-card" id="oc-' + o.po + '">'
+      + '<div>'
+      + '<div class="oc-po">' + o.po + '</div>'
+      + '<div class="oc-shop">' + o.shop + '</div>'
+      + '<div class="oc-meta">' + dateStr + ' &nbsp;·&nbsp; ' + o.qty + ' pcs &nbsp;·&nbsp; ' + o.skus + ' SKUs &nbsp;·&nbsp; ' + o.payment + '</div>'
+      + (actions ? '<div class="oc-actions">' + actions + '</div>' : '')
+      + '</div>'
+      + '<div style="text-align:right">'
+      + '<div class="oc-total">Rs ' + (o.total||0).toLocaleString('en-IN') + '</div>'
+      + '<div><span class="oc-status ' + stClass + '">' + o.status + '</span></div>'
+      + (o.confirmedBy ? '<div style="font-family:var(--f-ui);font-size:0.55rem;color:var(--muted2);margin-top:4px">by ' + o.confirmedBy + '</div>' : '')
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function renderEmpCustomers() {
+  var customers = EMP_DATA.customers || [];
+  var q = (document.getElementById('cust-search-inp') && document.getElementById('cust-search-inp').value || '').toLowerCase();
+  if (q) {
+    customers = customers.filter(function(c){
+      return (c.name+c.city+c.gstin+c.code+c.phone+c.cp).toLowerCase().includes(q);
+    });
+  }
+  if (!customers.length) {
+    document.getElementById('emp-customers-list').innerHTML = '<div class="emp-loading">No customers found.</div>';
+    return;
+  }
+  document.getElementById('emp-customers-list').innerHTML = customers.map(function(c){
+    return '<div class="cust-card">'
+      + '<div>'
+      + '<div class="cc-name">' + c.name + '</div>'
+      + '<div class="cc-meta">' + [c.city, c.state].filter(Boolean).join(', ')
+        + (c.gstin ? ' &nbsp;·&nbsp; ' + c.gstin : '')
+        + (c.phone ? ' &nbsp;·&nbsp; ' + c.phone : '')
+        + (c.cp    ? ' &nbsp;·&nbsp; ' + c.cp    : '')
+        + '</div>'
+      + '</div>'
+      + '<div style="text-align:right">'
+      + '<div class="cc-disc">' + (c.disc ? c.disc + '% discount' : '') + '</div>'
+      + (EMP_DATA.isManager ? '<div style="font-family:var(--f-ui);font-size:0.58rem;color:var(--muted2);margin-top:2px">' + (c.emp||'—') + '</div>' : '')
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function filterCustomers() { renderEmpCustomers(); }
+
+function empAction(po, status) {
+  if (!confirm('Mark order ' + po + ' as "' + status + '"?')) return;
+  var url = BACKEND_URL + '?action=emp_confirm_order'
+    + '&po=' + encodeURIComponent(po)
+    + '&status=' + encodeURIComponent(status)
+    + '&emp_id=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name : '')
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok) {
+      // Update local data and re-render
+      var order = EMP_DATA.orders.find(function(o){ return o.po === po; });
+      if (order) { order.status = status; order.confirmedBy = EMP_PROFILE ? EMP_PROFILE.name : ''; }
+      renderEmpOrders();
+    } else {
+      alert('Error: ' + (data.error || 'Could not update order'));
+    }
+  });
+}
+
+function empDispatch(po) {
+  var tracking = prompt('Enter tracking number / courier details for ' + po + ':');
+  if (!tracking) return;
+  var url = BACKEND_URL + '?action=emp_confirm_order'
+    + '&po=' + encodeURIComponent(po)
+    + '&status=Dispatched'
+    + '&tracking=' + encodeURIComponent(tracking)
+    + '&emp_id=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name : '')
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok) {
+      var order = EMP_DATA.orders.find(function(o){ return o.po === po; });
+      if (order) { order.status = 'Dispatched'; order.confirmedBy = EMP_PROFILE ? EMP_PROFILE.name : ''; }
+      renderEmpOrders();
+      alert('Order ' + po + ' marked as Dispatched. Tracking: ' + tracking);
+    } else {
+      alert('Error: ' + (data.error || 'Could not update'));
+    }
+  });
 }
 
 function doLogout() {
@@ -2786,6 +3088,17 @@ function loadOrderHistory(gstin) {
 
 // Check session on page load
 (function checkAuth() {
+  // Employee session first
+  var empProfile = null;
+  try { var se = sessionStorage.getItem('tth_emp'); if (se) empProfile = JSON.parse(se); } catch(e) {}
+  if (empProfile) {
+    EMP_PROFILE = empProfile;
+    var ls = document.getElementById('login-screen');
+    if (ls) ls.style.display = 'none';
+    showEmpDashboard(empProfile);
+    return;
+  }
+  // Customer session
   var profile = null;
   try { var s = sessionStorage.getItem('tth_profile'); if (s) profile = JSON.parse(s); } catch(e) {}
   if (profile) {
