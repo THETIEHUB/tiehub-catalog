@@ -133,6 +133,9 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 
 
 /* ===== EMPLOYEE DASHBOARD ===== */
+.emp-nav-btn{background:var(--cream2);border:1px solid var(--border);color:var(--ink);padding:0.5rem 1rem;font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:all 0.2s}
+.emp-nav-btn:hover{border-color:var(--gold);color:var(--gold)}
+.emp-nav-btn.active{background:var(--dark);color:var(--cream);border-color:var(--dark)}
 .emp-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:0.6rem 1.2rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;font-weight:500;margin-bottom:-1px;transition:all 0.2s}
 .emp-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
 .emp-tab:hover{color:var(--ink)}
@@ -2844,24 +2847,55 @@ function doEmpLogin(user, pwd) {
 }
 
 function showEmpDashboard(profile) {
-  // Hide all other pages
-  document.getElementById('page-home').style.display = 'none';
+  // Hide ALL pages and catalog elements
+  document.getElementById('page-home').style.display    = 'none';
   document.getElementById('page-catalog').style.display = 'none';
   document.getElementById('page-account').style.display = 'none';
-  document.getElementById('page-emp').style.display = 'block';
+  document.getElementById('page-emp').style.display     = 'block';
+
+  // Hide topbar and catalog nav
+  var topbar = document.querySelector('.topbar');
+  var mainnav = document.querySelector('.mainnav');
+  if (topbar)  topbar.style.display  = 'none';
+  if (mainnav) mainnav.style.display = 'none';
+
+  // Replace header-right with employee nav
+  buildEmpHeader(profile);
+
   window.scrollTo(0,0);
 
-  // Update header
+  // Fill employee name + role
   var isManager = profile.role === 'manager';
-  document.getElementById('emp-name-hdr').textContent = profile.name || profile.login_id;
-  document.getElementById('emp-role-lbl').textContent = isManager ? 'Manager — Full Access' : 'Salesperson';
+  document.getElementById('emp-name-hdr').textContent  = profile.name || profile.login_id;
+  document.getElementById('emp-role-lbl').textContent  = isManager ? 'Manager — Full Access' : 'Salesperson';
 
-  // Hide catalog nav for employees
-  document.querySelector('.mainnav') && (document.querySelector('.mainnav').style.display = 'none');
-  document.querySelector('.topbar')  && (document.querySelector('.topbar').style.display = 'none');
-
-  // Load dashboard data
+  // Load data
   loadEmpDashboard(profile);
+}
+
+function buildEmpHeader(profile) {
+  // Replace the header-right area with employee nav buttons
+  var headerRight = document.querySelector('.header-right');
+  if (!headerRight) return;
+  headerRight.innerHTML =
+    '<div style="display:flex;align-items:center;gap:0.5rem">'
+    + '<button class="emp-nav-btn active" id="enav-dashboard" onclick="empNavClick(\'dashboard\',this)">Dashboard</button>'
+    + '<button class="emp-nav-btn" id="enav-customers" onclick="empNavClick(\'customers\',this)">My Customers</button>'
+    + '<button class="emp-nav-btn" id="enav-orders" onclick="empNavClick(\'orders\',this)">Order Queue</button>'
+    + '</div>'
+    + '<button onclick="doLogout()" style="background:none;border:1px solid var(--border2);color:var(--muted);padding:0.5rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;margin-left:0.5rem;transition:all 0.2s" onmouseover="this.style.color=\'#C0392B\';this.style.borderColor=\'#C0392B\'" onmouseout="this.style.color=\'\';this.style.borderColor=\'\'">Sign Out</button>';
+}
+
+function empNavClick(tab, btn) {
+  // Update active button
+  document.querySelectorAll('.emp-nav-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  // Show the right tab in page-emp
+  document.getElementById('emp-orders-tab').style.display    = (tab === 'orders' || tab === 'dashboard') ? 'block' : 'none';
+  document.getElementById('emp-customers-tab').style.display = tab === 'customers' ? 'block' : 'none';
+  // Update tab buttons inside dashboard
+  document.getElementById('etab-orders').classList.toggle('active',    tab !== 'customers');
+  document.getElementById('etab-customers').classList.toggle('active', tab === 'customers');
 }
 
 function loadEmpDashboard(profile) {
@@ -3015,33 +3049,49 @@ function empDispatch(po) {
 
 function doLogout() {
   if (!confirm('Sign out of The Tie Hub catalog?')) return;
-  // Clear both session types
   LOGGED_IN_PROFILE = null;
   EMP_PROFILE = null;
   try { sessionStorage.removeItem('tth_profile'); } catch(e) {}
   try { sessionStorage.removeItem('tth_emp'); } catch(e) {}
-  // Restore nav for employees
-  var nav = document.querySelector('.mainnav');
-  var top = document.querySelector('.topbar');
-  if (nav) nav.style.display = '';
-  if (top) top.style.display = '';
-  // Hide account buttons
-  var btn = document.getElementById('acct-btn');
-  if (btn) btn.style.display = 'none';
-  var strip = document.getElementById('acct-strip');
-  if (strip) strip.style.display = 'none';
+
+  // Restore original header-right for customer use
+  var headerRight = document.querySelector('.header-right');
+  if (headerRight) {
+    headerRight.innerHTML =
+      '<div class="search-wrap" style="position:relative">'
+      + '<input class="search-inp" id="search" placeholder="Search SKU e.g. TTH-WLPS-1026" oninput="onSearch()" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">'
+      + '<span class="search-icon">⌕</span>'
+      + '<div id="search-quickresult" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1px solid var(--gold);border-top:none;z-index:500;padding:0.8rem 1rem;box-shadow:0 8px 24px rgba(0,0,0,0.12)"></div>'
+      + '</div>'
+      + '<button class="order-btn" onclick="togglePanel()">🛒 &nbsp;Order<span class="order-badge" id="cart-count">0</span></button>'
+      + '<button class="acct-btn" id="acct-btn" onclick="showMyAccount()" style="display:none" title="My Account">'
+      + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>'
+      + 'My Account</button>'
+      + '<div id="acct-strip" style="display:none"><span id="acct-strip-company"></span><span id="acct-strip-gstin"></span><span id="acct-strip-disc"></span></div>';
+  }
+
+  // Restore topbar and nav
+  var topbar = document.querySelector('.topbar');
+  var mainnav = document.querySelector('.mainnav');
+  if (topbar)  topbar.style.display  = '';
+  if (mainnav) mainnav.style.display = '';
+
   // Hide all pages
-  document.getElementById('page-home').style.display = 'none';
+  document.getElementById('page-home').style.display    = 'none';
   document.getElementById('page-catalog').style.display = 'none';
   document.getElementById('page-account').style.display = 'none';
-  document.getElementById('page-emp').style.display = 'none';
+  document.getElementById('page-emp').style.display     = 'none';
+
   // Show login screen
   var ls = document.getElementById('login-screen');
   if (ls) { ls.style.opacity = '1'; ls.style.display = 'flex'; }
-  document.getElementById('login-user').value = '';
-  document.getElementById('login-pwd').value = '';
-  document.getElementById('login-error').style.display = 'none';
-  setTimeout(function(){ document.getElementById('login-user').focus(); }, 100);
+  var userInp = document.getElementById('login-user');
+  var pwdInp  = document.getElementById('login-pwd');
+  if (userInp) userInp.value = '';
+  if (pwdInp)  pwdInp.value  = '';
+  var errEl = document.getElementById('login-error');
+  if (errEl) errEl.style.display = 'none';
+  setTimeout(function(){ if (userInp) userInp.focus(); }, 100);
 }
 
 // ===== MY ACCOUNT PAGE =====
