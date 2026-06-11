@@ -3010,16 +3010,21 @@ function filterCustomers() { renderEmpCustomers(); }
 function empAction(po, status) {
   if (!confirm('Mark order ' + po + ' as "' + status + '"?')) return;
   var url = BACKEND_URL + '?action=emp_confirm_order'
-    + '&po=' + encodeURIComponent(po)
+    + '&po='     + encodeURIComponent(po)
     + '&status=' + encodeURIComponent(status)
     + '&emp_id=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name : '')
-    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+    + '&_t='     + encodeURIComponent(BACKEND_TOKEN);
   fetch(url).then(function(r){ return r.json(); }).then(function(data){
     if (data.ok) {
-      // Update local data and re-render
       var order = EMP_DATA.orders.find(function(o){ return o.po === po; });
       if (order) { order.status = status; order.confirmedBy = EMP_PROFILE ? EMP_PROFILE.name : ''; }
-      renderEmpOrders();
+      if (status === 'Confirmed') {
+        if (order) order.inv = data.invoice_number || '';
+        renderEmpOrders();
+        generateInvoicePDF(po, data.invoice_number || '');
+      } else {
+        renderEmpOrders();
+      }
     } else {
       alert('Error: ' + (data.error || 'Could not update order'));
     }
@@ -3027,24 +3032,124 @@ function empAction(po, status) {
 }
 
 function empDispatch(po) {
-  var tracking = prompt('Enter tracking number / courier details for ' + po + ':');
+  var tracking = prompt('Enter courier name + tracking number for ' + po + ':');
   if (!tracking) return;
   var url = BACKEND_URL + '?action=emp_confirm_order'
-    + '&po=' + encodeURIComponent(po)
+    + '&po='       + encodeURIComponent(po)
     + '&status=Dispatched'
     + '&tracking=' + encodeURIComponent(tracking)
-    + '&emp_id=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name : '')
-    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+    + '&emp_id='   + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name : '')
+    + '&_t='       + encodeURIComponent(BACKEND_TOKEN);
   fetch(url).then(function(r){ return r.json(); }).then(function(data){
     if (data.ok) {
       var order = EMP_DATA.orders.find(function(o){ return o.po === po; });
-      if (order) { order.status = 'Dispatched'; order.confirmedBy = EMP_PROFILE ? EMP_PROFILE.name : ''; }
+      if (order) { order.status = 'Dispatched'; order.tracking = tracking; order.confirmedBy = EMP_PROFILE ? EMP_PROFILE.name : ''; }
       renderEmpOrders();
-      alert('Order ' + po + ' marked as Dispatched. Tracking: ' + tracking);
     } else {
       alert('Error: ' + (data.error || 'Could not update'));
     }
   });
+}
+
+function generateInvoicePDF(po, invNumber) {
+  var url = BACKEND_URL + '?action=get_order_invoice'
+    + '&po=' + encodeURIComponent(po)
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) { alert('Could not load invoice: ' + (data.error||'')); return; }
+    openInvoiceWindow(data.meta, data.items, invNumber || data.meta.inv);
+  }).catch(function(){ alert('Connection error loading invoice.'); });
+}
+
+function openInvoiceWindow(meta, items, inv) {
+  inv = inv || meta.inv || 'DRAFT';
+  var date = (meta.confTs || meta.ts || '').split(' ')[0] || new Date().toISOString().split('T')[0];
+  var rowsHTML = items.map(function(item, idx){
+    var halfGst = (item.gstAmt / 2).toFixed(2);
+    return '<tr>'
+      + '<td style="text-align:center">'+(idx+1)+'</td>'
+      + '<td><div style="font-weight:600;color:#1A1612">'+item.sku+'</div><div style="font-size:7.5pt;color:#7A6E5C">'+item.cat+'</div></td>'
+      + '<td style="text-align:center">'+item.qty+'</td>'
+      + '<td style="text-align:right">\u20B9'+item.mrp.toLocaleString('en-IN')+'</td>'
+      + '<td style="text-align:right">\u20B9'+item.gross.toLocaleString('en-IN')+'</td>'
+      + '<td style="text-align:right;color:#856404">-\u20B9'+item.disc.toLocaleString('en-IN')+'</td>'
+      + '<td style="text-align:center">'+item.gstPct+'%</td>'
+      + '<td style="text-align:right">\u20B9'+halfGst+'</td>'
+      + '<td style="text-align:right">\u20B9'+halfGst+'</td>'
+      + '<td style="text-align:right;font-weight:600">\u20B9'+item.total.toLocaleString('en-IN')+'</td>'
+      + '</tr>';
+  }).join('');
+  var win = window.open('','_blank');
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Tax Invoice '+inv+'</title>'
+    + '<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=DM+Serif+Display&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">'
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Inter",sans-serif;color:#2A2520;background:#fff;padding:18px 22px;font-size:9pt}'
+    + '.inv-hdr{display:grid;grid-template-columns:1fr 1fr;gap:1rem;border-bottom:2px solid #8B6F1F;padding-bottom:12px;margin-bottom:12px}'
+    + '.brand-name{font-family:"Playfair Display",serif;font-size:20pt;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#1A1612}'
+    + '.brand-sub{font-size:6.5pt;letter-spacing:0.3em;text-transform:uppercase;color:#8B6F1F;margin-top:2px}'
+    + '.brand-addr{font-size:7.5pt;color:#5A5040;margin-top:6px;line-height:1.6}'
+    + '.inv-info{text-align:right}.inv-title{font-family:"Playfair Display",serif;font-size:15pt;color:#1A1612}'
+    + '.inv-num{font-family:"DM Serif Display",serif;font-size:12pt;color:#8B6F1F;margin:3px 0}'
+    + '.inv-meta{font-size:7.5pt;color:#5A5040;line-height:1.8}'
+    + '.bill-sec{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:10px;padding:8px 12px;background:#FAF6EF;border:0.5px solid #E0D8C8}'
+    + '.bl{font-size:6.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#8B6F1F;font-weight:600;margin-bottom:3px}'
+    + '.bv{font-size:9pt;color:#1A1612;font-weight:500;line-height:1.5}'
+    + '.bs{font-size:8pt;color:#5A5040;line-height:1.5}'
+    + '.note{font-size:7pt;color:#5A5040;margin-bottom:8px;padding:5px 8px;background:#FAF6EF;border-left:2px solid #8B6F1F}'
+    + 'table{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:10px}'
+    + 'thead th{background:#1A1612;color:#FAF6EF;padding:5px 4px;text-align:left;font-size:6.5pt;letter-spacing:0.1em;text-transform:uppercase;font-weight:500}'
+    + 'tbody td{padding:5px 4px;border-bottom:0.5px solid #E0D8C8;vertical-align:middle}'
+    + 'tbody tr:nth-child(even){background:#FAF6EF}'
+    + '.tot-wrap{display:flex;justify-content:flex-end}.tots{width:280px;border:0.5px solid #E0D8C8}'
+    + '.tr{display:flex;justify-content:space-between;padding:4px 8px;font-size:8.5pt;border-bottom:0.5px solid #E0D8C8}'
+    + '.tr.grand{background:#1A1612;color:#FAF6EF;font-family:"DM Serif Display",serif;font-size:12pt;padding:6px 8px;border:none}'
+    + '.tr.grand span:last-child{color:#C7A653}'
+    + '.signs{display:flex;justify-content:space-between;margin-top:18px;padding-top:8px;border-top:0.5px solid #E0D8C8}'
+    + '.sbox{text-align:center;width:150px}.sline{border-top:0.5px solid #1A1612;margin-top:28px;padding-top:4px;font-size:7pt;letter-spacing:0.12em;text-transform:uppercase;color:#7A6E5C}'
+    + '.foot{text-align:center;font-size:7pt;color:#8A7D6E;margin-top:14px;padding-top:8px;border-top:0.5px solid #E0D8C8;line-height:1.6}'
+    + '@media print{@page{size:A4;margin:10mm}body{padding:0}.np{display:none}}'
+    + '</style></head><body>'
+    + '<div class="np" style="margin-bottom:10px;display:flex;gap:8px">'
+    + '<button onclick="window.print()" style="background:#1A1612;color:#FAF6EF;border:none;padding:8px 16px;font-family:Inter,sans-serif;font-size:8pt;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer">\u2399 Print / Save PDF</button>'
+    + '<button onclick="window.close()" style="background:none;border:1px solid #ccc;padding:8px 12px;font-family:Inter,sans-serif;font-size:8pt;cursor:pointer">Close</button>'
+    + '</div>'
+    + '<div class="inv-hdr">'
+    + '<div><div class="brand-name">The Tie Hub</div><div class="brand-sub">By Big Five Inc.</div>'
+    + '<div class="brand-addr">Ground Floor, B-1, Amrit Niwas, B Wing<br>15 Sarojini Road, Vile Parle West, Mumbai - 400056<br>GSTIN: 27AYNPK2735R1ZM &nbsp;&#183;&nbsp; Ph: 26130975<br>Email: dme@thetiehub.com</div></div>'
+    + '<div class="inv-info"><div class="inv-title">TAX INVOICE</div>'
+    + '<div class="inv-num">'+inv+'</div>'
+    + '<div class="inv-meta">Date: '+date+'<br>PO No: '+meta.po+'<br>Confirmed by: '+(meta.confBy||'\u2014')+'</div></div>'
+    + '</div>'
+    + '<div class="bill-sec">'
+    + '<div><div class="bl">Bill To</div><div class="bv">'+(meta.shop||'\u2014')+'</div>'
+    + '<div class="bs">'+(meta.addr||'')+(meta.city?', '+meta.city:'')+(meta.state?', '+meta.state:'')+'</div>'
+    + '<div class="bs" style="margin-top:3px">GSTIN: '+(meta.gstin||'\u2014')+'</div></div>'
+    + '<div><div class="bl">Payment Terms</div><div class="bv">'+(meta.payment||'\u2014')+'</div>'
+    + (meta.discPct?'<div class="bs" style="margin-top:5px">Discount: '+meta.discPct+'%</div>':'')
+    + '</div></div>'
+    + '<div class="note">Subject to Mumbai Jurisdiction &nbsp;&#183;&nbsp; Goods once sold will not be taken back &nbsp;&#183;&nbsp; E&amp;OE</div>'
+    + '<table><thead><tr>'
+    + '<th style="text-align:center;width:24px">#</th><th>SKU / Description</th>'
+    + '<th style="text-align:center;width:32px">Qty</th><th style="text-align:right;width:55px">MRP</th>'
+    + '<th style="text-align:right;width:65px">Gross</th><th style="text-align:right;width:55px">Disc</th>'
+    + '<th style="text-align:center;width:36px">GST%</th><th style="text-align:right;width:55px">CGST</th>'
+    + '<th style="text-align:right;width:55px">SGST</th><th style="text-align:right;width:65px">Net Total</th>'
+    + '</tr></thead><tbody>'+rowsHTML+'</tbody></table>'
+    + '<div class="tot-wrap"><div class="tots">'
+    + '<div class="tr"><span>Subtotal</span><span>\u20B9'+meta.subtotal.toLocaleString('en-IN')+'</span></div>'
+    + '<div class="tr"><span>Discount</span><span style="color:#856404">-\u20B9'+meta.discount.toLocaleString('en-IN')+'</span></div>'
+    + '<div class="tr"><span>CGST</span><span>\u20B9'+(meta.gst/2).toLocaleString('en-IN')+'</span></div>'
+    + '<div class="tr"><span>SGST</span><span>\u20B9'+(meta.gst/2).toLocaleString('en-IN')+'</span></div>'
+    + '<div class="tr grand"><span>Grand Total</span><span>\u20B9'+meta.grand.toLocaleString('en-IN')+'</span></div>'
+    + '</div></div>'
+    + '<div class="signs">'
+    + '<div class="sbox"><div class="sline">Customer Signature</div></div>'
+    + '<div class="sbox"><div class="sline">Authorised Signatory<br>The Tie Hub</div></div>'
+    + '</div>'
+    + '<div class="foot">The Tie Hub &nbsp;&#183;&nbsp; By Big Five Inc. &nbsp;&#183;&nbsp; 15 Sarojini Road, Vile Parle West, Mumbai 400056<br>'
+    + 'GSTIN: 27AYNPK2735R1ZM &nbsp;&#183;&nbsp; dme@thetiehub.com &nbsp;&#183;&nbsp; 26130975<br>Computer generated invoice.</div>'
+    + '</body></html>';
+  win.document.write(html);
+  win.document.close();
 }
 
 function doLogout() {
