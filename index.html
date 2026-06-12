@@ -91,6 +91,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .order-hist-total{font-family:var(--f-num);font-size:1.05rem;color:var(--dark);text-align:right}
 .order-status{display:inline-block;font-family:var(--f-ui);font-size:0.5rem;letter-spacing:0.15em;text-transform:uppercase;padding:2px 7px;border-radius:2px;font-weight:500}
 .status-received{background:#FEF3CD;color:#856404}
+.status-confirmed{background:#CCE5FF;color:#004085}
 .status-dispatched{background:#D1E7DD;color:#0F5132}
 .status-delivered{background:#D0F0EB;color:#0D6B5E}
 @media(max-width:640px){
@@ -3239,17 +3240,61 @@ function loadOrderHistory(gstin) {
       return;
     }
     ordersEl.innerHTML = data.orders.map(function(o) {
-      var statusClass = o.status.toLowerCase().includes('dispatch') ? 'status-dispatched'
-        : o.status.toLowerCase().includes('deliver') ? 'status-delivered' : 'status-received';
+      var s = (o.status || 'Received').toLowerCase();
+      var statusClass = s.includes('dispatch') ? 'status-dispatched'
+        : s.includes('deliver') ? 'status-delivered'
+        : s.includes('confirm') ? 'status-confirmed'
+        : 'status-received';
       var dateStr = o.ts ? o.ts.split(' ')[0] : '—';
-      return '<div class="order-hist-row">'
-        + '<div><div class="order-hist-po">' + o.po + '</div><div class="order-hist-date">' + dateStr + '</div></div>'
-        + '<div class="order-hist-detail">' + o.qty + ' pcs · ' + o.skus + ' SKUs<br><span class="order-status ' + statusClass + '">' + o.status + '</span></div>'
-        + '<div class="order-hist-total">Rs ' + (o.total||0).toLocaleString('en-IN') + '</div>'
+
+      // Invoice button
+      var invBtn = '';
+      if (o.inv) {
+        invBtn = '<button onclick="custDownloadInvoice(\'' + o.po + '\',\'' + o.inv + '\')" '
+          + 'style="background:none;border:1px solid var(--gold);color:var(--gold);padding:3px 10px;font-family:var(--f-ui);font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:all 0.15s;margin-top:5px;display:inline-block" '
+          + 'onmouseover="this.style.background=\'var(--gold)\';this.style.color=\'var(--cream)\'" '
+          + 'onmouseout="this.style.background=\'none\';this.style.color=\'var(--gold)\'">'
+          + '⬇ Invoice ' + o.inv + '</button>';
+      }
+
+      // Tracking
+      var trackingEl = '';
+      if (o.tracking && (s.includes('dispatch') || s.includes('deliver'))) {
+        trackingEl = '<div style="margin-top:5px;font-family:var(--f-ui);font-size:0.62rem;color:var(--ink)">'
+          + '<span style="color:var(--muted2);letter-spacing:0.1em;text-transform:uppercase;font-size:0.52rem">Tracking: </span>'
+          + '<span style="font-weight:500">' + o.tracking + '</span>'
+          + '</div>';
+      }
+
+      return '<div class="order-hist-row" style="display:grid;grid-template-columns:1fr 1fr auto;align-items:start;padding:1rem 1.5rem;border-bottom:1px solid var(--border);gap:1rem">'
+        + '<div>'
+        + '<div class="order-hist-po">' + o.po + '</div>'
+        + '<div class="order-hist-date">' + dateStr + '</div>'
+        + invBtn
+        + '</div>'
+        + '<div>'
+        + '<div class="order-hist-detail">' + o.qty + ' pcs · ' + o.skus + ' SKUs</div>'
+        + '<div style="margin-top:3px"><span class="order-status ' + statusClass + '">' + o.status + '</span></div>'
+        + trackingEl
+        + '</div>'
+        + '<div class="order-hist-total" style="text-align:right">Rs ' + (o.total||0).toLocaleString('en-IN') + '</div>'
         + '</div>';
     }).join('');
   }).catch(function() {
     ordersEl.innerHTML = '<div style="padding:2rem;text-align:center;font-family:var(--f-body);font-style:italic;color:var(--muted)">Could not load orders. Check your connection.</div>';
+  });
+}
+
+function custDownloadInvoice(po, invNumber) {
+  // Customer clicks Download Invoice — fetch order data and open PDF
+  var url = BACKEND_URL + '?action=get_order_invoice'
+    + '&po=' + encodeURIComponent(po)
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) { alert('Invoice not available. Please contact The Tie Hub.'); return; }
+    openInvoiceWindow(data.meta, data.items, invNumber);
+  }).catch(function(){
+    alert('Connection error. Please try again.');
   });
 }
 
