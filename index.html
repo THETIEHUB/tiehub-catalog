@@ -797,13 +797,24 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     </div>
 
     <!-- Order history -->
-    <div style="background:var(--white);border:1px solid var(--border)">
+    <div style="background:var(--white);border:1px solid var(--border);margin-bottom:1.5rem">
       <div style="padding:1.2rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
         <div style="font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.3em;text-transform:uppercase;color:var(--gold);font-weight:500">Order History</div>
         <div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted)">Last 20 orders</div>
       </div>
       <div id="acct-orders">
         <div style="padding:2rem;text-align:center;font-family:var(--f-body);font-style:italic;color:var(--muted)">Loading orders...</div>
+      </div>
+    </div>
+
+    <!-- Payment Ledger -->
+    <div style="background:var(--white);border:1px solid var(--border)">
+      <div style="padding:1.2rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
+        <div style="font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.3em;text-transform:uppercase;color:var(--gold);font-weight:500">Payment Ledger</div>
+        <div id="acct-outstanding-badge" style="display:none;font-family:var(--f-num);font-size:1.1rem;color:var(--dark)"></div>
+      </div>
+      <div id="acct-ledger">
+        <div style="padding:2rem;text-align:center;font-family:var(--f-body);font-style:italic;color:var(--muted)">Loading ledger...</div>
       </div>
     </div>
   </div>
@@ -829,6 +840,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <div style="display:flex;gap:0;margin-bottom:1.5rem;border-bottom:1px solid var(--border)">
       <button class="emp-tab active" id="etab-orders" onclick="switchEmpTab('orders')">Order Queue</button>
       <button class="emp-tab" id="etab-customers" onclick="switchEmpTab('customers')">My Customers</button>
+      <button class="emp-tab" id="etab-payments" onclick="switchEmpTab('payments')">Payments</button>
     </div>
 
     <!-- ORDER QUEUE TAB -->
