@@ -867,6 +867,17 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       </div>
     </div>
 
+    <!-- PAYMENTS TAB -->
+    <div id="emp-payments-tab" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+        <div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted);letter-spacing:0.05em">All outstanding invoices — mark payment received</div>
+        <div id="emp-total-outstanding" style="font-family:var(--f-num);font-size:1.2rem;color:var(--dark)"></div>
+      </div>
+      <div id="emp-payments-list">
+        <div class="emp-loading">Loading pending payments...</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -2900,15 +2911,10 @@ function buildEmpHeader(profile) {
 }
 
 function empNavClick(tab, btn) {
-  // Update active button
   document.querySelectorAll('.emp-nav-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
-  // Show the right tab in page-emp
-  document.getElementById('emp-orders-tab').style.display    = (tab === 'orders' || tab === 'dashboard') ? 'block' : 'none';
-  document.getElementById('emp-customers-tab').style.display = tab === 'customers' ? 'block' : 'none';
-  // Update tab buttons inside dashboard
-  document.getElementById('etab-orders').classList.toggle('active',    tab !== 'customers');
-  document.getElementById('etab-customers').classList.toggle('active', tab === 'customers');
+  var empTab = (tab === 'orders' || tab === 'dashboard') ? 'orders' : tab === 'customers' ? 'customers' : 'payments';
+  switchEmpTab(empTab);
 }
 
 function loadEmpDashboard(profile) {
@@ -2939,8 +2945,11 @@ function loadEmpDashboard(profile) {
 function switchEmpTab(tab) {
   document.getElementById('emp-orders-tab').style.display    = tab === 'orders'    ? 'block' : 'none';
   document.getElementById('emp-customers-tab').style.display = tab === 'customers' ? 'block' : 'none';
+  document.getElementById('emp-payments-tab').style.display  = tab === 'payments'  ? 'block' : 'none';
   document.getElementById('etab-orders').classList.toggle('active',    tab === 'orders');
   document.getElementById('etab-customers').classList.toggle('active', tab === 'customers');
+  document.getElementById('etab-payments').classList.toggle('active',  tab === 'payments');
+  if (tab === 'payments') loadPendingPayments();
 }
 
 function filterOrders(status, btn) {
