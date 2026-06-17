@@ -1134,8 +1134,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 
         <div class="fi-row-wrap" style="margin-top:0.75rem">
           <div class="fi-row">
-            <div><label class="fl">Salesperson</label><input class="fi" id="f-sales" placeholder="Your name" style="margin-bottom:0"></div>
-            <div><label class="fl">PO Reference</label><input class="fi" id="f-po-ref" placeholder="Customer PO#" style="margin-bottom:0"></div>
+            <div style="grid-column:1/-1"><label class="fl">PO Reference</label><input class="fi" id="f-po-ref" placeholder="Customer PO#" style="margin-bottom:0"></div>
           </div>
         </div>
 
@@ -1248,6 +1247,7 @@ function showCatalog(navKey) {
   searchQ = '';
   displayLimit = 80;
   document.getElementById('page-home').style.display = 'none';
+  document.getElementById('page-account').style.display = 'none';
   document.getElementById('page-catalog').style.display = 'block';
   document.getElementById('ch-title').textContent = navKey === 'ALL' ? 'All Collections' : navKey;
   setNavActive(navKey);
@@ -2388,7 +2388,6 @@ function generatePO() {
   const delivery  = document.getElementById('f-delivery').value || 'As discussed';
   const discPct   = parseFloat(document.getElementById('f-discount').value) || 0;
   // GST is auto-calculated per SKU - no manual input needed
-  const salesperson = fixMojibake(document.getElementById('f-sales').value) || '-';
   const poRef     = document.getElementById('f-po-ref').value || '';
   const deladdr   = fixMojibake(document.getElementById('f-deladdr').value) || addr;
   const remarks   = fixMojibake(document.getElementById('f-remarks').value) || '-';
@@ -3150,7 +3149,17 @@ function loadCustomerLedger(gstin) {
   el.innerHTML = '<div style="padding:1.5rem;text-align:center;font-family:var(--f-body);font-style:italic;color:var(--muted)">Loading...</div>';
   var url = BACKEND_URL + '?action=get_ledger&gstin=' + encodeURIComponent(gstin)
     + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+
+  // Safety timeout — never let this hang forever
+  var timedOut = false;
+  var timeoutId = setTimeout(function(){
+    timedOut = true;
+    el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-style:italic">Taking longer than expected. <a href="#" onclick="loadCustomerLedger(\'' + gstin + '\');return false;" style="color:var(--gold)">Retry</a></div>';
+  }, 12000);
+
   fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    clearTimeout(timeoutId);
+    if (timedOut) return; // already showed timeout message, ignore late response visually replacing it is fine too but keep simple
     if (!data.ok) { el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-style:italic">Could not load ledger.</div>'; return; }
     var invoices = data.invoices || [];
     if (!invoices.length) {
@@ -3203,7 +3212,8 @@ function loadCustomerLedger(gstin) {
         + '</div>';
     }).join('');
   }).catch(function(){
-    el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-style:italic">Connection error.</div>';
+    clearTimeout(timeoutId);
+    el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-style:italic">Connection error. <a href="#" onclick="loadCustomerLedger(\'' + gstin + '\');return false;" style="color:var(--gold)">Retry</a></div>';
   });
 }
 
@@ -3310,6 +3320,7 @@ function openInvoiceWindow(meta, items, inv) {
     + '</style></head><body>'
     + '<div class="np" style="margin-bottom:10px;display:flex;gap:8px">'
     + '<button onclick="window.print()" style="background:#1A1612;color:#FAF6EF;border:none;padding:8px 16px;font-family:Inter,sans-serif;font-size:8pt;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer">\u2399 Print / Save PDF</button>'
+    + '<button onclick="window.opener && window.opener.exportInvoiceExcel(' + JSON.stringify(JSON.stringify(meta)) + ',' + JSON.stringify(JSON.stringify(items)) + ',' + JSON.stringify(inv) + ')" style="background:#0F5132;color:#fff;border:none;padding:8px 16px;font-family:Inter,sans-serif;font-size:8pt;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer">\u2913 Export Excel</button>'
     + '<button onclick="window.close()" style="background:none;border:1px solid #ccc;padding:8px 12px;font-family:Inter,sans-serif;font-size:8pt;cursor:pointer">Close</button>'
     + '</div>'
     + '<div class="inv-hdr">'
@@ -3350,6 +3361,32 @@ function openInvoiceWindow(meta, items, inv) {
     + '</body></html>';
   win.document.write(html);
   win.document.close();
+}
+
+// Exports the order line items in the exact format you use:
+// Item SKU | Quantity | Selling Price | Discount Percentage | Final Price/Pc (after disc + GST)
+function exportInvoiceExcel(metaJSON, itemsJSON, inv) {
+  var XLSX = window.XLSX;
+  if (!XLSX) { alert('Excel library still loading — please try again in a moment.'); return; }
+  var meta  = JSON.parse(metaJSON);
+  var items = JSON.parse(itemsJSON);
+
+  var rows = [['Item SKU', 'Quantity', 'Selling Price', 'Discount Percentage', 'Final Price/Pc (Incl. GST)']];
+
+  items.forEach(function(it){
+    var sellingPrice = it.mrp || 0;
+    var discPct = it.gross > 0 ? Math.round((it.disc / it.gross) * 10000) / 100 : 0;
+    // Final per-piece amount after discount + GST, evenly split across qty
+    var finalPerPc = it.qty > 0 ? Math.round((it.total / it.qty) * 100) / 100 : 0;
+    rows.push([it.sku, it.qty, sellingPrice, discPct, finalPerPc]);
+  });
+
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:22},{wch:10},{wch:14},{wch:18},{wch:22}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Order Items');
+  var fname = 'TieHub_' + (inv || meta.po || 'Order').replace(/[\/\\:]/g,'-') + '.xlsx';
+  XLSX.writeFile(wb, fname);
 }
 
 function doLogout() {
