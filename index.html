@@ -2906,6 +2906,7 @@ function buildEmpHeader(profile) {
     + '<button class="emp-nav-btn active" id="enav-dashboard" onclick="empNavClick(\'dashboard\',this)">Dashboard</button>'
     + '<button class="emp-nav-btn" id="enav-customers" onclick="empNavClick(\'customers\',this)">My Customers</button>'
     + '<button class="emp-nav-btn" id="enav-orders" onclick="empNavClick(\'orders\',this)">Order Queue</button>'
+    + '<button class="emp-nav-btn" id="enav-payments" onclick="empNavClick(\'payments\',this)">Payments</button>'
     + '</div>'
     + '<button onclick="doLogout()" style="background:none;border:1px solid var(--border2);color:var(--muted);padding:0.5rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;margin-left:0.5rem;transition:all 0.2s" onmouseover="this.style.color=\'#C0392B\';this.style.borderColor=\'#C0392B\'" onmouseout="this.style.color=\'\';this.style.borderColor=\'\'">Sign Out</button>';
 }
@@ -3028,6 +3029,183 @@ function renderEmpCustomers() {
 }
 
 function filterCustomers() { renderEmpCustomers(); }
+
+// ===== PAYMENT LEDGER — EMPLOYEE SIDE =====
+function loadPendingPayments() {
+  var el = document.getElementById('emp-payments-list');
+  el.innerHTML = '<div class="emp-loading">Loading outstanding payments...</div>';
+  var url = BACKEND_URL + '?action=get_pending_payments&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) { el.innerHTML = '<div class="emp-loading">Error: ' + (data.error||'Could not load') + '</div>'; return; }
+    var list = data.pending || [];
+    if (!list.length) {
+      el.innerHTML = '<div class="emp-loading">No outstanding payments. All invoices are cleared!</div>';
+      document.getElementById('emp-total-outstanding').textContent = '';
+      return;
+    }
+    var total = list.reduce(function(s,i){ return s + i.outstanding; }, 0);
+    document.getElementById('emp-total-outstanding').textContent = 'Total Outstanding: Rs ' + total.toLocaleString('en-IN');
+    el.innerHTML = list.map(function(inv){
+      var overdueBadge = inv.overdue
+        ? '<span style="background:#C0392B;color:#fff;font-family:var(--f-ui);font-size:0.5rem;letter-spacing:0.12em;text-transform:uppercase;padding:2px 7px;margin-left:6px">OVERDUE</span>'
+        : '';
+      return '<div class="order-card" id="pcard-' + inv.po + '">'
+        + '<div>'
+        + '<div class="oc-po">' + inv.inv + ' &nbsp;·&nbsp; ' + inv.po + overdueBadge + '</div>'
+        + '<div class="oc-shop">' + inv.shop + '</div>'
+        + '<div class="oc-meta">Invoice: Rs ' + inv.amount.toLocaleString('en-IN')
+          + ' &nbsp;·&nbsp; Paid: Rs ' + inv.paid.toLocaleString('en-IN')
+          + (inv.dueDate ? ' &nbsp;·&nbsp; Due: ' + inv.dueDate : '')
+          + ' &nbsp;·&nbsp; ' + (inv.pt || '—')
+          + '</div>'
+        + '<div class="oc-actions">'
+        + '<button class="oc-btn primary" onclick="openRecordPayment(\'' + inv.po + '\',\'' + inv.inv + '\',\'' + inv.gstin + '\',\'' + inv.shop.replace(/'/g,"\\'") + '\',' + inv.amount + ',' + inv.outstanding + ')">✓ Record Payment</button>'
+        + '</div></div>'
+        + '<div style="text-align:right">'
+        + '<div style="font-family:var(--f-ui);font-size:0.6rem;color:var(--muted2);text-transform:uppercase;letter-spacing:0.1em">Outstanding</div>'
+        + '<div class="oc-total" style="color:' + (inv.overdue ? '#C0392B' : 'var(--dark)') + '">Rs ' + inv.outstanding.toLocaleString('en-IN') + '</div>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }).catch(function(){
+    el.innerHTML = '<div class="emp-loading">Connection error.</div>';
+  });
+}
+
+function openRecordPayment(po, inv, gstin, shop, invAmount, outstanding) {
+  var existing = document.getElementById('pay-modal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'pay-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,16,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML =
+    '<div style="background:var(--cream);max-width:460px;width:100%;border-top:3px solid var(--gold)">'
+    + '<div style="padding:1.3rem 1.8rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+    + '<div style="font-family:var(--f-display);font-size:1.3rem;font-weight:500;color:var(--dark)">Record Payment</div>'
+    + '<button onclick="document.getElementById(\'pay-modal\').remove()" style="background:none;border:1px solid var(--border2);color:var(--muted);width:30px;height:30px;cursor:pointer;font-size:1.1rem">&times;</button>'
+    + '</div>'
+    + '<div style="padding:1.5rem 1.8rem">'
+    + '<div style="background:var(--cream2);padding:0.8rem 1rem;margin-bottom:1.2rem;border:1px solid var(--border)">'
+    + '<div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted)">Invoice: <strong>' + inv + '</strong> &nbsp;·&nbsp; PO: <strong>' + po + '</strong></div>'
+    + '<div style="font-family:var(--f-display);font-size:1.1rem;color:var(--dark);margin-top:3px">' + shop + '</div>'
+    + '<div style="font-family:var(--f-ui);font-size:0.72rem;color:var(--muted);margin-top:3px">Invoice: Rs ' + invAmount.toLocaleString('en-IN') + ' &nbsp;·&nbsp; Outstanding: <strong style="color:var(--dark)">Rs ' + outstanding.toLocaleString('en-IN') + '</strong></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:0.8rem">'
+    + '<div><label style="font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted2);display:block;margin-bottom:3px">Amount Received</label>'
+    + '<input id="pay-amount" type="number" value="' + outstanding + '" min="1" style="width:100%;background:var(--white);border:1px solid var(--border);padding:0.6rem 0.8rem;font-family:var(--f-num);font-size:1rem;color:var(--dark);outline:none"></div>'
+    + '<div><label style="font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted2);display:block;margin-bottom:3px">Payment Date</label>'
+    + '<input id="pay-date" type="date" value="' + new Date().toISOString().split('T')[0] + '" style="width:100%;background:var(--white);border:1px solid var(--border);padding:0.6rem 0.8rem;font-family:var(--f-ui);font-size:0.82rem;color:var(--dark);outline:none"></div>'
+    + '</div>'
+    + '<div style="margin-bottom:0.8rem"><label style="font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted2);display:block;margin-bottom:3px">Payment Mode</label>'
+    + '<select id="pay-mode" style="width:100%;background:var(--white);border:1px solid var(--border);padding:0.6rem 0.8rem;font-family:var(--f-ui);font-size:0.82rem;color:var(--dark);outline:none">'
+    + '<option>NEFT/RTGS</option><option>Cheque</option><option>Cash</option><option>UPI</option><option>IMPS</option>'
+    + '</select></div>'
+    + '<div style="margin-bottom:1.2rem"><label style="font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted2);display:block;margin-bottom:3px">Notes (ref number etc.)</label>'
+    + '<input id="pay-notes" type="text" placeholder="e.g. NEFT Ref: 123456789" style="width:100%;background:var(--white);border:1px solid var(--border);padding:0.6rem 0.8rem;font-family:var(--f-ui);font-size:0.82rem;color:var(--dark);outline:none"></div>'
+    + '<button onclick="submitPayment(\'' + po + '\',\'' + inv + '\',\'' + gstin + '\',\'' + shop.replace(/'/g,"\\'") + '\',' + invAmount + ')" '
+    + 'style="width:100%;background:var(--dark);color:var(--cream);border:none;padding:0.9rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:background 0.2s" '
+    + 'onmouseover="this.style.background=\'var(--gold)\'" onmouseout="this.style.background=\'var(--dark)\'">Confirm Payment Received</button>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+}
+
+function submitPayment(po, inv, gstin, shop, invAmount) {
+  var amount  = parseFloat(document.getElementById('pay-amount').value) || 0;
+  var date    = document.getElementById('pay-date').value;
+  var mode    = document.getElementById('pay-mode').value;
+  var notes   = document.getElementById('pay-notes').value;
+  if (!amount || amount <= 0) { alert('Please enter a valid amount.'); return; }
+  var url = BACKEND_URL + '?action=record_payment'
+    + '&inv='        + encodeURIComponent(inv)
+    + '&po='         + encodeURIComponent(po)
+    + '&gstin='      + encodeURIComponent(gstin)
+    + '&shop='       + encodeURIComponent(shop)
+    + '&inv_amount=' + encodeURIComponent(invAmount)
+    + '&pay_amount=' + encodeURIComponent(amount)
+    + '&pay_date='   + encodeURIComponent(date)
+    + '&pay_mode='   + encodeURIComponent(mode)
+    + '&notes='      + encodeURIComponent(notes)
+    + '&emp_id='     + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name : '')
+    + '&_t='         + encodeURIComponent(BACKEND_TOKEN);
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok) {
+      document.getElementById('pay-modal').remove();
+      alert('Payment of Rs ' + amount.toLocaleString('en-IN') + ' recorded for ' + po);
+      loadPendingPayments();
+    } else {
+      alert('Error: ' + (data.error || 'Could not record payment'));
+    }
+  }).catch(function(){ alert('Connection error. Please try again.'); });
+}
+
+// ===== PAYMENT LEDGER — CUSTOMER SIDE =====
+function loadCustomerLedger(gstin) {
+  var el = document.getElementById('acct-ledger');
+  var badge = document.getElementById('acct-outstanding-badge');
+  if (!gstin || gstin === '—') {
+    el.innerHTML = '<div style="padding:1.5rem;text-align:center;font-family:var(--f-body);font-style:italic;color:var(--muted)">No GSTIN on file.</div>';
+    return;
+  }
+  el.innerHTML = '<div style="padding:1.5rem;text-align:center;font-family:var(--f-body);font-style:italic;color:var(--muted)">Loading...</div>';
+  var url = BACKEND_URL + '?action=get_ledger&gstin=' + encodeURIComponent(gstin)
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) { el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-style:italic">Could not load ledger.</div>'; return; }
+    var invoices = data.invoices || [];
+    if (!invoices.length) {
+      el.innerHTML = '<div style="padding:2rem;text-align:center;font-family:var(--f-body);font-style:italic;color:var(--muted)">No invoices found. Place an order to see your ledger.</div>';
+      badge.style.display = 'none';
+      return;
+    }
+    var totalOut = data.totalOutstanding || 0;
+    badge.style.display = 'block';
+    badge.textContent = totalOut > 0
+      ? 'Outstanding: Rs ' + totalOut.toLocaleString('en-IN')
+      : '✓ All Cleared';
+    badge.style.color = totalOut > 0 ? '#C0392B' : '#0F5132';
+
+    el.innerHTML = invoices.map(function(inv){
+      var paidFull = inv.outstanding <= 0;
+      var overdueBadge = inv.overdue
+        ? '<span style="background:#C0392B;color:#fff;font-family:var(--f-ui);font-size:0.5rem;letter-spacing:0.1em;text-transform:uppercase;padding:2px 6px;margin-left:6px">OVERDUE</span>'
+        : '';
+      var payRows = '';
+      if (inv.payments && inv.payments.length) {
+        payRows = inv.payments.map(function(p){
+          return '<div style="display:flex;justify-content:space-between;padding:0.4rem 1rem 0.4rem 1.5rem;border-top:1px solid var(--border);background:var(--cream2)">'
+            + '<div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted)">'
+            + p.date + ' &nbsp;·&nbsp; ' + (p.mode||'—')
+            + (p.note ? ' &nbsp;·&nbsp; ' + p.note : '')
+            + '</div>'
+            + '<div style="font-family:var(--f-num);font-size:0.9rem;color:#0F5132">- Rs ' + p.amount.toLocaleString('en-IN') + '</div>'
+            + '</div>';
+        }).join('');
+      }
+      return '<div style="border-bottom:1px solid var(--border)">'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr auto;align-items:start;padding:1rem 1.5rem;gap:1rem">'
+        + '<div>'
+        + '<div style="font-family:var(--f-ui);font-size:0.7rem;letter-spacing:0.1em;color:var(--gold);font-weight:600">' + inv.inv + overdueBadge + '</div>'
+        + '<div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted);margin-top:2px">PO: ' + inv.po + ' &nbsp;·&nbsp; ' + inv.date + '</div>'
+        + (inv.dueDate ? '<div style="font-family:var(--f-ui);font-size:0.62rem;color:' + (inv.overdue?'#C0392B':'var(--muted)') + ';margin-top:2px">Due: ' + inv.dueDate + '</div>' : '')
+        + '</div>'
+        + '<div>'
+        + '<div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted2)">Invoice</div>'
+        + '<div style="font-family:var(--f-num);font-size:1rem;color:var(--dark)">Rs ' + inv.amount.toLocaleString('en-IN') + '</div>'
+        + (inv.paid > 0 ? '<div style="font-family:var(--f-ui);font-size:0.62rem;color:#0F5132;margin-top:2px">Paid: Rs ' + inv.paid.toLocaleString('en-IN') + '</div>' : '')
+        + '</div>'
+        + '<div style="text-align:right">'
+        + '<div style="font-family:var(--f-ui);font-size:0.55rem;color:var(--muted2);text-transform:uppercase;letter-spacing:0.1em">' + (paidFull ? 'Paid' : 'Outstanding') + '</div>'
+        + '<div style="font-family:var(--f-num);font-size:1.2rem;color:' + (paidFull?'#0F5132':'#C0392B') + '">' + (paidFull ? '✓ Cleared' : 'Rs ' + inv.outstanding.toLocaleString('en-IN')) + '</div>'
+        + '</div>'
+        + '</div>'
+        + payRows
+        + '</div>';
+    }).join('');
+  }).catch(function(){
+    el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-style:italic">Connection error.</div>';
+  });
+}
 
 function empAction(po, status) {
   if (!confirm('Mark order ' + po + ' as "' + status + '"?')) return;
@@ -3242,8 +3420,9 @@ function showMyAccount() {
   document.getElementById('acct-disc').textContent = p.disc ? p.disc + '%' : 'Standard';
   document.getElementById('acct-pt').textContent = p.pt || '—';
 
-  // Load order history
+  // Load order history and ledger
   loadOrderHistory(p.gstin);
+  loadCustomerLedger(p.gstin);
 }
 
 function loadOrderHistory(gstin) {
