@@ -2454,7 +2454,7 @@ function generatePO() {
 
   // Store for Excel export
   _lastPO = { poNum, date, dueDate, shop, gstNum, addr, city, state, contact, phone, payment, delivery,
-              discPct, salesperson, poRef, deladdr, remarks, itemsData, subtotal, discAmt, afterDisc, gstAmt, grandTotal, totalQty };
+              discPct, poRef, deladdr, remarks, itemsData, subtotal, discAmt, afterDisc, gstAmt, grandTotal, totalQty };
 
   document.getElementById('po-box').innerHTML = `
     <div class="po-header">
@@ -2474,7 +2474,6 @@ function generatePO() {
         <div class="po-doc-meta">
           <span>Date:</span> ${date}<br>
           ${poRef ? `<span>Cust. PO#:</span> ${poRef}<br>` : ''}
-          <span>Salesperson:</span> ${salesperson}<br>
           <span>Payment:</span> ${payment}<br>
           ${dueDate ? `<span>Due Date:</span> <strong style="color:var(--amber)">${dueDate}</strong><br>` : ''}
           <span>Delivery:</span> ${delivery}
@@ -2555,9 +2554,8 @@ function exportExcel() {
     ['GSTIN: 27AYNPK2735R1ZM | Ph: 26130975'],
     [],
     ['PO Number', d.poNum, '', 'Date', d.date],
-    ['Customer PO#', d.poRef || '-', '', 'Salesperson', d.salesperson],
-    ['Payment Terms', d.payment, '', 'Due Date', d.dueDate || 'On Delivery'],
-    ['Delivery', d.delivery],
+    ['Customer PO#', d.poRef || '-', '', 'Due Date', d.dueDate || 'On Delivery'],
+    ['Payment Terms', d.payment, '', 'Delivery', d.delivery],
     [],
     ['BILL TO'],
     ['Shop / Company', d.shop],
@@ -2616,7 +2614,6 @@ function showOrderConfirmation() {
   const payment  = document.getElementById('f-payment').value;
   const delivery = document.getElementById('f-delivery').value;
   const discPct  = parseFloat(document.getElementById('f-discount').value) || 0;
-  const salesperson = document.getElementById('f-sales').value.trim();
   const poRef    = document.getElementById('f-po-ref').value.trim();
   const deladdr  = document.getElementById('f-deladdr').value.trim();
   const remarks  = document.getElementById('f-remarks').value.trim();
@@ -2696,7 +2693,6 @@ function showOrderConfirmation() {
     '<div class="cg-row"><span class="cg-key">Due Date</span><span class="cg-val">' + (dueNote||'On Delivery') + '</span></div>' +
     '<div class="cg-row"><span class="cg-key">Delivery</span><span class="cg-val">' + delivery + '</span></div>' +
     '<div class="cg-row"><span class="cg-key">Discount</span><span class="cg-val">' + (discPct > 0 ? discPct + '%' : 'None') + '</span></div>' +
-    (salesperson ? '<div class="cg-row"><span class="cg-key">Salesperson</span><span class="cg-val">'+salesperson+'</span></div>' : '') +
     (poRef ? '<div class="cg-row"><span class="cg-key">Customer PO#</span><span class="cg-val">'+poRef+'</span></div>' : '') +
     (remarks ? '<div class="cg-row" style="grid-column:1/-1"><span class="cg-key">Remarks</span><span class="cg-val">'+remarks+'</span></div>' : '') +
     '</div>';
@@ -3637,7 +3633,6 @@ function submitOrderToBackend() {
       dueDate:     dueDate,
       delivery:    document.getElementById('f-delivery').value || '',
       discPct:     discPct,
-      salesperson: document.getElementById('f-sales').value || '',
       poRef:       document.getElementById('f-po-ref').value || '',
       remarks:     document.getElementById('f-remarks').value || ''
     },
@@ -3673,7 +3668,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Persist customer form so refresh doesn't wipe their details
 function setupFormPersistence() {
   var FORM_KEY = 'tiehub_form_v1';
-  var fields = ['f-shop','f-gst','f-addr','f-name','f-phone','f-email','f-city','f-state','f-deladdr','f-payment','f-delivery','f-discount','f-sales','f-po-ref','f-remarks'];
+  var fields = ['f-shop','f-gst','f-addr','f-name','f-phone','f-email','f-city','f-state','f-deladdr','f-payment','f-delivery','f-discount','f-po-ref','f-remarks'];
 
   // Restore saved values
   try {
