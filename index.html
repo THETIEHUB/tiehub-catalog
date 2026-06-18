@@ -3576,6 +3576,8 @@ function confirmAndGeneratePO() {
   closeConfirm();
   submitOrderToBackend();   // saves to sheet + sends emails
   generatePO();             // still shows the PO on screen (PDF/WhatsApp/Excel buttons)
+  cart = {};                // order placed — empty the cart
+  sync();                   // save empty cart, update badge, re-render product cards
 }
 
 function submitOrderToBackend() {
