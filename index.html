@@ -846,6 +846,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <button class="emp-tab active" id="etab-orders" onclick="switchEmpTab('orders')">Order Queue</button>
       <button class="emp-tab" id="etab-customers" onclick="switchEmpTab('customers')">My Customers</button>
       <button class="emp-tab" id="etab-payments" onclick="switchEmpTab('payments')">Payments</button>
+      <button class="emp-tab" id="etab-abandoned" onclick="switchEmpTab('abandoned')">Abandoned Carts</button>
     </div>
 
     <!-- ORDER QUEUE TAB -->
@@ -886,6 +887,14 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       </div>
       <div id="emp-payments-list">
         <div class="emp-loading">Loading pending payments...</div>
+      </div>
+    </div>
+
+    <!-- ABANDONED CARTS TAB -->
+    <div id="emp-abandoned-tab" style="display:none">
+      <div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted);letter-spacing:0.05em;margin-bottom:1rem">In-progress orders left incomplete — resume or discard them</div>
+      <div id="emp-abandoned-list">
+        <div class="emp-loading">Loading abandoned carts...</div>
       </div>
     </div>
 
@@ -1095,6 +1104,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
           </div>
         </div>
 
+        <div id="order-fields-wrap">
         <label class="fl">GSTIN <span style="color:var(--gold);font-style:italic">&#8212; type &amp; press Enter or click Fetch</span></label>
         <div class="gst-row" style="margin-bottom:0.5rem">
           <input class="gst-input" id="f-gst" placeholder="Enter GSTIN e.g. 27AYNPK2735R1ZM" maxlength="15" style="text-transform:uppercase;letter-spacing:0.05em;flex:1">
@@ -1174,6 +1184,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 
         <label class="fl">Order Remarks</label>
         <input class="fi" id="f-remarks" placeholder="Any special instructions...">
+        </div>
+        <!-- end order-fields-wrap -->
 
         <!-- Honeypot field — hidden from real users, bots auto-fill it -->
         <div style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none" aria-hidden="true">
@@ -2231,9 +2243,17 @@ function updateCartCount() {
 }
 
 function togglePanel() {
-  document.getElementById('overlay').classList.toggle('show');
-  renderPanel();
-  setupEmpCustomerTypeUI();
+  var overlay = document.getElementById('overlay');
+  var wasOpen = overlay.classList.contains('show');
+  overlay.classList.toggle('show');
+  if (wasOpen) {
+    // Panel is being CLOSED — if an employee has items in cart but didn't confirm, save as abandoned
+    saveCurrentCartAsAbandoned();
+  } else {
+    // Panel is being OPENED
+    renderPanel();
+    setupEmpCustomerTypeUI();
+  }
 }
 
 // ===== NEW vs OLD CUSTOMER (employee browsing on behalf of a customer) =====
@@ -2241,13 +2261,22 @@ var CUST_TYPE = 'OLD'; // default
 
 function setupEmpCustomerTypeUI() {
   var wrap = document.getElementById('emp-cust-type-wrap');
+  var fieldsWrap = document.getElementById('order-fields-wrap');
   if (!wrap) return;
   if (EMP_PROFILE) {
     wrap.style.display = 'block';
     populateOldCustomerDropdown();
-    setCustType(CUST_TYPE); // restore last choice for this session
+    // On fresh panel open, hide the fields until employee makes a choice
+    if (fieldsWrap) fieldsWrap.style.display = 'none';
+    document.getElementById('cust-type-old').classList.remove('active');
+    document.getElementById('cust-type-new').classList.remove('active');
+    document.getElementById('old-cust-picker').style.display = 'none';
+    document.getElementById('new-cust-note').style.display = 'none';
+    var custSearchEl = document.getElementById('f-old-cust-search');
+    if (custSearchEl) custSearchEl.value = '';
   } else {
     wrap.style.display = 'none';
+    if (fieldsWrap) fieldsWrap.style.display = 'block'; // customers always see the form
   }
 }
 
@@ -2294,6 +2323,8 @@ function pickOldCustomer(gst) {
   document.getElementById('old-cust-results').style.display = 'none';
   document.getElementById('f-gst').value = gst;
   lookupGST(); // reuses existing auto-fill logic
+  var fieldsWrap = document.getElementById('order-fields-wrap');
+  if (fieldsWrap) fieldsWrap.style.display = 'block';
 }
 
 // Close results dropdown when clicking elsewhere
@@ -2310,8 +2341,10 @@ function setCustType(type) {
   document.getElementById('old-cust-picker').style.display = type === 'OLD' ? 'block' : 'none';
   document.getElementById('new-cust-note').style.display    = type === 'NEW' ? 'block' : 'none';
 
+  var fieldsWrap = document.getElementById('order-fields-wrap');
+
   if (type === 'NEW') {
-    // Clear all fields for fresh manual entry
+    // Clear all fields for fresh manual entry, and show the form right away
     ['f-gst','f-shop','f-addr','f-name','f-phone','f-email','f-city','f-state','f-discount','f-deladdr'].forEach(function(id){
       var el = document.getElementById(id);
       if (el) el.value = '';
@@ -2322,6 +2355,10 @@ function setCustType(type) {
     if (custGstEl) custGstEl.value = '';
     var resEl = document.getElementById('gst-result');
     if (resEl) resEl.className = 'gst-result';
+    if (fieldsWrap) fieldsWrap.style.display = 'block';
+  } else {
+    // OLD selected — keep fields hidden until a specific customer is actually picked
+    if (fieldsWrap) fieldsWrap.style.display = 'none';
   }
 }
 
@@ -3030,6 +3067,7 @@ function buildEmpHeader(profile) {
     + '<button class="emp-nav-btn" id="enav-customers" onclick="empNavClick(\'customers\',this)">My Customers</button>'
     + '<button class="emp-nav-btn" id="enav-orders" onclick="empNavClick(\'orders\',this)">Order Queue</button>'
     + '<button class="emp-nav-btn" id="enav-payments" onclick="empNavClick(\'payments\',this)">Payments</button>'
+    + '<button class="emp-nav-btn" id="enav-abandoned" onclick="empNavClick(\'abandoned\',this)">Abandoned Carts</button>'
     + '<button class="emp-nav-btn browse" id="enav-browse" onclick="empBrowseCatalog()">🛍 Browse Catalog</button>'
     + '</div>'
     + '<button onclick="doLogout()" style="background:none;border:1px solid var(--border2);color:var(--muted);padding:0.5rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;margin-left:0.5rem;transition:all 0.2s" onmouseover="this.style.color=\'#C0392B\';this.style.borderColor=\'#C0392B\'" onmouseout="this.style.color=\'\';this.style.borderColor=\'\'">Sign Out</button>';
@@ -3065,6 +3103,7 @@ function empBrowseCatalog() {
 }
 
 function empBackToDashboard() {
+  saveCurrentCartAsAbandoned();
   hideEmpBrowsingBanner();
   showEmpDashboard(EMP_PROFILE);
 }
@@ -3087,7 +3126,10 @@ function hideEmpBrowsingBanner() {
 function empNavClick(tab, btn) {
   document.querySelectorAll('.emp-nav-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
-  var empTab = (tab === 'orders' || tab === 'dashboard') ? 'orders' : tab === 'customers' ? 'customers' : 'payments';
+  var empTab = (tab === 'orders' || tab === 'dashboard') ? 'orders'
+    : tab === 'customers' ? 'customers'
+    : tab === 'abandoned' ? 'abandoned'
+    : 'payments';
   switchEmpTab(empTab);
 }
 
@@ -3121,10 +3163,13 @@ function switchEmpTab(tab) {
   document.getElementById('emp-orders-tab').style.display    = tab === 'orders'    ? 'block' : 'none';
   document.getElementById('emp-customers-tab').style.display = tab === 'customers' ? 'block' : 'none';
   document.getElementById('emp-payments-tab').style.display  = tab === 'payments'  ? 'block' : 'none';
+  document.getElementById('emp-abandoned-tab').style.display = tab === 'abandoned' ? 'block' : 'none';
   document.getElementById('etab-orders').classList.toggle('active',    tab === 'orders');
   document.getElementById('etab-customers').classList.toggle('active', tab === 'customers');
   document.getElementById('etab-payments').classList.toggle('active',  tab === 'payments');
-  if (tab === 'payments') loadPendingPayments();
+  document.getElementById('etab-abandoned').classList.toggle('active', tab === 'abandoned');
+  if (tab === 'payments')  loadPendingPayments();
+  if (tab === 'abandoned') loadAbandonedCarts();
 }
 
 function filterOrders(status, btn) {
@@ -3234,6 +3279,144 @@ function renderEmpCustomers() {
 function filterCustomers() { renderEmpCustomers(); }
 
 // ===== PAYMENT LEDGER — EMPLOYEE SIDE =====
+// ===== ABANDONED CARTS =====
+function loadAbandonedCarts() {
+  var el = document.getElementById('emp-abandoned-list');
+  el.innerHTML = '<div class="emp-loading">Loading abandoned carts...</div>';
+  var url = BACKEND_URL + '?action=get_abandoned_carts'
+    + '&emp_id='   + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.emp_id : '')
+    + '&emp_role=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.role   : '')
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name  : '')
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) { el.innerHTML = '<div class="emp-loading">Error: ' + (data.error||'Could not load') + '</div>'; return; }
+    var carts = data.carts || [];
+    if (!carts.length) {
+      el.innerHTML = '<div class="emp-loading">No abandoned carts. All orders are either placed or in progress.</div>';
+      return;
+    }
+    el.innerHTML = carts.map(function(c){
+      var dateStr = c.ts ? c.ts.split(' ')[0] : '—';
+      var typeLabel = c.cust_type === 'NEW' ? 'New Customer' : 'Existing Customer';
+      var nameDisplay = c.shop || '(name not entered yet)';
+      return '<div class="order-card" id="ac-' + c.cart_id + '">'
+        + '<div>'
+        + '<div class="oc-po">' + typeLabel + ' &nbsp;·&nbsp; ' + dateStr + '</div>'
+        + '<div class="oc-shop">' + nameDisplay + '</div>'
+        + '<div class="oc-meta">' + c.itemCount + ' item(s) in cart'
+          + (c.gstin ? ' &nbsp;·&nbsp; ' + c.gstin : '')
+          + (c.phone ? ' &nbsp;·&nbsp; ' + c.phone : '')
+          + (c.emp_name ? ' &nbsp;·&nbsp; by ' + c.emp_name : '')
+          + '</div>'
+        + '<div class="oc-actions">'
+        + '<button class="oc-btn primary" onclick="resumeAbandonedCart(\'' + c.cart_id + '\')">↻ Resume Order</button>'
+        + '<button class="oc-btn danger" onclick="discardAbandonedCart(\'' + c.cart_id + '\')">✕ Discard</button>'
+        + '</div></div>'
+        + '</div>';
+    }).join('');
+  }).catch(function(){
+    el.innerHTML = '<div class="emp-loading">Connection error.</div>';
+  });
+}
+
+var _ABANDONED_CARTS_CACHE = [];
+
+function resumeAbandonedCart(cartId) {
+  var url = BACKEND_URL + '?action=get_abandoned_carts'
+    + '&emp_id='   + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.emp_id : '')
+    + '&emp_role=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.role   : '')
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name  : '')
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) { alert('Could not load cart: ' + (data.error||'')); return; }
+    var c = (data.carts || []).find(function(x){ return x.cart_id === cartId; });
+    if (!c) { alert('Cart not found — it may have already been resumed or discarded.'); return; }
+
+    // Restore the cart items
+    cart = c.cart || {};
+    sync();
+
+    // Switch to Browse Catalog so employee can review/add more items
+    empBrowseCatalog();
+
+    // Open the order panel and pre-fill what we have
+    setTimeout(function(){
+      togglePanel();
+      setCustType(c.cust_type === 'NEW' ? 'NEW' : 'OLD');
+      var fieldsWrap = document.getElementById('order-fields-wrap');
+      if (fieldsWrap) fieldsWrap.style.display = 'block';
+      var setVal = function(id, val){ var el = document.getElementById(id); if (el && val) el.value = val; };
+      setVal('f-shop', c.shop);
+      setVal('f-gst', c.gstin);
+      setVal('f-name', c.contact);
+      setVal('f-phone', c.phone);
+      setVal('f-city', c.city);
+      setVal('f-state', c.state);
+      if (c.cust_type === 'OLD' && c.gstin) {
+        var searchEl = document.getElementById('f-old-cust-search');
+        if (searchEl) searchEl.value = c.shop;
+        var gstEl = document.getElementById('f-old-cust-gst');
+        if (gstEl) gstEl.value = c.gstin;
+      }
+    }, 300);
+
+    // Remove this abandoned cart record since it's now being resumed
+    deleteAbandonedCartOnServer(cartId);
+  }).catch(function(){
+    alert('Connection error. Please try again.');
+  });
+}
+
+function discardAbandonedCart(cartId) {
+  if (!confirm('Discard this abandoned cart? This cannot be undone.')) return;
+  deleteAbandonedCartOnServer(cartId, function(){
+    var card = document.getElementById('ac-' + cartId);
+    if (card) card.remove();
+  });
+}
+
+function deleteAbandonedCartOnServer(cartId, onSuccess) {
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify({ action: 'delete_abandoned_cart', cart_id: cartId, _t: BACKEND_TOKEN })
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok && onSuccess) onSuccess();
+  }).catch(function(){});
+}
+
+// Save current cart as "abandoned" — called when employee closes the order panel without confirming
+function saveCurrentCartAsAbandoned() {
+  if (!EMP_PROFILE) return; // only relevant for employees
+  var keys = Object.keys(cart || {});
+  if (!keys.length) return; // nothing to save
+
+  var shop = (document.getElementById('f-shop') && document.getElementById('f-shop').value) || '';
+  var gst  = (document.getElementById('f-gst')  && document.getElementById('f-gst').value)  || '';
+  // Don't save if the order was just successfully placed (cart already cleared by then)
+  var payload = {
+    action:   'save_abandoned_cart',
+    emp_id:   EMP_PROFILE.emp_id || '',
+    emp_name: EMP_PROFILE.name   || '',
+    cust_type: CUST_TYPE || 'OLD',
+    shop:     shop,
+    gst:      gst,
+    contact:  (document.getElementById('f-name')  && document.getElementById('f-name').value)  || '',
+    phone:    (document.getElementById('f-phone') && document.getElementById('f-phone').value) || '',
+    city:     (document.getElementById('f-city')  && document.getElementById('f-city').value)  || '',
+    state:    (document.getElementById('f-state') && document.getElementById('f-state').value) || '',
+    cart:     cart,
+    note:     '',
+    _t:       BACKEND_TOKEN
+  };
+
+  navigator.sendBeacon
+    ? navigator.sendBeacon(BACKEND_URL, new Blob([JSON.stringify(payload)], {type:'text/plain;charset=utf-8'}))
+    : fetch(BACKEND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload) }).catch(function(){});
+}
+
 function loadPendingPayments() {
   var el = document.getElementById('emp-payments-list');
   el.innerHTML = '<div class="emp-loading">Loading outstanding payments...</div>';
@@ -3686,6 +3869,7 @@ function exportInvoiceExcel(metaJSON, itemsJSON, inv) {
 function doLogout() {
   if (!confirm('Sign out of The Tie Hub catalog?')) return;
   var wasEmployee = !!EMP_PROFILE;
+  if (wasEmployee) saveCurrentCartAsAbandoned(); // preserve any in-progress order before clearing
   LOGGED_IN_PROFILE = null;
   EMP_PROFILE = null;
   try { sessionStorage.removeItem('tth_profile'); } catch(e) {}
