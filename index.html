@@ -2255,7 +2255,8 @@ function saveCart() {
 }
 function sync() { saveCart(); updateCartCount(); renderProducts(); renderPanel(); }
 function updateCartCount() {
-  document.getElementById('cart-count').textContent = Object.values(cart).reduce((a,b)=>a+b,0);
+  var el = document.getElementById('cart-count');
+  if (el) el.textContent = Object.values(cart).reduce((a,b)=>a+b,0);
 }
 
 function togglePanel() {
@@ -3401,41 +3402,36 @@ function resumeAbandonedCart(cartId) {
     var c = (data.carts || []).find(function(x){ return x.cart_id === cartId; });
     if (!c) { alert('Cart not found — it may have already been resumed or discarded.'); return; }
 
-    try {
-      // Restore the cart items
-      cart = c.cart || {};
-      sync();
+    // Restore the cart items into memory
+    cart = c.cart || {};
 
-      // Switch to Browse Catalog so employee can review/add more items
-      empBrowseCatalog();
+    // Switch to Browse Catalog FIRST — this builds the customer-style header
+    // (search box, Order button, cart-count badge) that sync() below needs to exist.
+    empBrowseCatalog();
 
-      // Open the order panel — but DO NOT auto-pick OLD/NEW or fields.
-      // Employee is asked fresh whether this is OLD or NEW, every time a cart is resumed.
-      setTimeout(function(){
-        try {
-          togglePanel(); // this calls setupEmpCustomerTypeUI() which resets to the blank choice screen
+    // Now it's safe to sync — cart-count and other header elements exist
+    sync();
 
-          // Stash whatever partial details were saved so we can offer them once a type is chosen
-          _RESUMED_CART_DATA = c;
+    // Open the order panel — but DO NOT auto-pick OLD/NEW or fields.
+    // Employee is asked fresh whether this is OLD or NEW, every time a cart is resumed.
+    setTimeout(function(){
+      togglePanel(); // this calls setupEmpCustomerTypeUI() which resets to the blank choice screen
 
-          // If there were partial details captured, pre-fill the search box with the saved name
-          // so employee can quickly re-pick the same customer if they choose OLD.
-          if (c.shop) {
-            var searchEl = document.getElementById('f-old-cust-search');
-            if (searchEl) searchEl.value = c.shop;
-          }
-        } catch (errInner) {
-          alert('Resume step 2 error: ' + errInner.message);
-        }
-      }, 300);
+      // Stash whatever partial details were saved so we can offer them once a type is chosen
+      _RESUMED_CART_DATA = c;
 
-      // Remove this abandoned cart record since it's now being resumed
-      deleteAbandonedCartOnServer(cartId);
-    } catch (errOuter) {
-      alert('Resume step 1 error: ' + errOuter.message);
-    }
-  }).catch(function(err){
-    alert('Connection error: ' + (err && err.message ? err.message : 'unknown'));
+      // If there were partial details captured, pre-fill the search box with the saved name
+      // so employee can quickly re-pick the same customer if they choose OLD.
+      if (c.shop) {
+        var searchEl = document.getElementById('f-old-cust-search');
+        if (searchEl) searchEl.value = c.shop;
+      }
+    }, 300);
+
+    // Remove this abandoned cart record since it's now being resumed
+    deleteAbandonedCartOnServer(cartId);
+  }).catch(function(){
+    alert('Connection error. Please try again.');
   });
 }
 
