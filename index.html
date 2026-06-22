@@ -1134,7 +1134,11 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <div class="fi-row-wrap">
           <div class="fi-row">
             <div><label class="fl">City</label><input class="fi" id="f-city" placeholder="City" style="margin-bottom:0"></div>
-            <div><label class="fl">State</label><input class="fi" id="f-state" placeholder="State" style="margin-bottom:0"></div>
+            <div><label class="fl">State</label>
+              <select class="fi" id="f-state" style="margin-bottom:0">
+                <option value="">Select State</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1170,6 +1174,18 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
                 🧾 Applied per SKU at checkout
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- NEW CUSTOMER ONLY: GST Yes/No -->
+        <div id="new-cust-gst-wrap" style="display:none;margin-top:0.75rem;background:var(--cream2);border:1px solid var(--border);padding:0.7rem 0.9rem">
+          <label class="fl" style="margin-bottom:0.5rem">Apply GST for this customer?</label>
+          <div style="display:flex;gap:0.6rem">
+            <button type="button" id="new-gst-yes" class="cust-type-btn active" onclick="setNewCustGST(true)">YES — Apply GST per Category</button>
+            <button type="button" id="new-gst-no" class="cust-type-btn" onclick="setNewCustGST(false)">NO — Flat Discount Only, No GST</button>
+          </div>
+          <div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted);margin-top:0.5rem;line-height:1.5">
+            This choice is saved with the customer's record — future orders will use it automatically.
           </div>
         </div>
 
@@ -2272,6 +2288,8 @@ function setupEmpCustomerTypeUI() {
     document.getElementById('cust-type-new').classList.remove('active');
     document.getElementById('old-cust-picker').style.display = 'none';
     document.getElementById('new-cust-note').style.display = 'none';
+    var gstWrap = document.getElementById('new-cust-gst-wrap');
+    if (gstWrap) gstWrap.style.display = 'none';
     var custSearchEl = document.getElementById('f-old-cust-search');
     if (custSearchEl) custSearchEl.value = '';
   } else {
@@ -2342,6 +2360,8 @@ function setCustType(type) {
   document.getElementById('new-cust-note').style.display    = type === 'NEW' ? 'block' : 'none';
 
   var fieldsWrap = document.getElementById('order-fields-wrap');
+  var gstWrap = document.getElementById('new-cust-gst-wrap');
+  var resumed = _RESUMED_CART_DATA; // partial details from an abandoned cart, if any
 
   if (type === 'NEW') {
     // Clear all fields for fresh manual entry, and show the form right away
@@ -2356,10 +2376,43 @@ function setCustType(type) {
     var resEl = document.getElementById('gst-result');
     if (resEl) resEl.className = 'gst-result';
     if (fieldsWrap) fieldsWrap.style.display = 'block';
+    if (gstWrap) gstWrap.style.display = 'block';
+    setNewCustGST(true); // default to GST applied
+
+    // Re-apply any partial details that were saved in the abandoned cart
+    if (resumed) {
+      var setVal = function(id, val){ var el = document.getElementById(id); if (el && val) el.value = val; };
+      setVal('f-shop', resumed.shop);
+      setVal('f-gst', resumed.gstin);
+      setVal('f-name', resumed.contact);
+      setVal('f-phone', resumed.phone);
+      setVal('f-city', resumed.city);
+      setVal('f-state', resumed.state);
+    }
   } else {
-    // OLD selected — keep fields hidden until a specific customer is actually picked
+    // OLD selected — keep fields hidden until a specific customer is actually picked.
+    // If the resumed cart already had a GSTIN, try selecting that same customer automatically;
+    // otherwise leave the search box ready for the employee to pick someone.
     if (fieldsWrap) fieldsWrap.style.display = 'none';
+    if (gstWrap) gstWrap.style.display = 'none';
+    if (resumed && resumed.gstin && CUSTOMER_DB[resumed.gstin.toUpperCase()]) {
+      pickOldCustomer(resumed.gstin.toUpperCase());
+    } else if (resumed && resumed.shop) {
+      var searchEl = document.getElementById('f-old-cust-search');
+      if (searchEl) searchEl.value = resumed.shop;
+    }
   }
+}
+
+// GST Yes/No toggle for a brand-new customer (saved to their record on first order)
+var NEW_CUST_GST_APPLY = true;
+
+function setNewCustGST(applyGst) {
+  NEW_CUST_GST_APPLY = applyGst;
+  document.getElementById('new-gst-yes').classList.toggle('active', applyGst === true);
+  document.getElementById('new-gst-no').classList.toggle('active', applyGst === false);
+  // Reuse the same GST_EXEMPT flag the rest of the pricing logic already respects
+  window.GST_EXEMPT = (applyGst === false);
 }
 
 function renderPanel() {
@@ -2531,6 +2584,19 @@ const GST_STATE_CODES = {
   '32':'Kerala','33':'Tamil Nadu','34':'Puducherry','35':'Andaman & Nicobar','36':'Telangana',
   '37':'Andhra Pradesh (New)','38':'Ladakh'
 };
+
+// Populate the State dropdown once, using the same state names GSTIN auto-detect already uses
+(function populateStateDropdown(){
+  var sel = document.getElementById('f-state');
+  if (!sel) return;
+  var names = Array.from(new Set(Object.values(GST_STATE_CODES))).sort();
+  names.forEach(function(name){
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+})();
 
 // ---- GENERATE PO ----
 // Store last PO data for Excel export
@@ -3104,6 +3170,7 @@ function empBrowseCatalog() {
 
 function empBackToDashboard() {
   saveCurrentCartAsAbandoned();
+  _RESUMED_CART_DATA = null;
   hideEmpBrowsingBanner();
   showEmpDashboard(EMP_PROFILE);
 }
@@ -3341,24 +3408,19 @@ function resumeAbandonedCart(cartId) {
     // Switch to Browse Catalog so employee can review/add more items
     empBrowseCatalog();
 
-    // Open the order panel and pre-fill what we have
+    // Open the order panel — but DO NOT auto-pick OLD/NEW or fields.
+    // Employee is asked fresh whether this is OLD or NEW, every time a cart is resumed.
     setTimeout(function(){
-      togglePanel();
-      setCustType(c.cust_type === 'NEW' ? 'NEW' : 'OLD');
-      var fieldsWrap = document.getElementById('order-fields-wrap');
-      if (fieldsWrap) fieldsWrap.style.display = 'block';
-      var setVal = function(id, val){ var el = document.getElementById(id); if (el && val) el.value = val; };
-      setVal('f-shop', c.shop);
-      setVal('f-gst', c.gstin);
-      setVal('f-name', c.contact);
-      setVal('f-phone', c.phone);
-      setVal('f-city', c.city);
-      setVal('f-state', c.state);
-      if (c.cust_type === 'OLD' && c.gstin) {
+      togglePanel(); // this calls setupEmpCustomerTypeUI() which resets to the blank choice screen
+
+      // Stash whatever partial details were saved so we can offer them once a type is chosen
+      _RESUMED_CART_DATA = c;
+
+      // If there were partial details captured, pre-fill the search box with the saved name
+      // so employee can quickly re-pick the same customer if they choose OLD.
+      if (c.shop) {
         var searchEl = document.getElementById('f-old-cust-search');
         if (searchEl) searchEl.value = c.shop;
-        var gstEl = document.getElementById('f-old-cust-gst');
-        if (gstEl) gstEl.value = c.gstin;
       }
     }, 300);
 
@@ -3368,6 +3430,8 @@ function resumeAbandonedCart(cartId) {
     alert('Connection error. Please try again.');
   });
 }
+
+var _RESUMED_CART_DATA = null;
 
 function discardAbandonedCart(cartId) {
   if (!confirm('Discard this abandoned cart? This cannot be undone.')) return;
@@ -4054,6 +4118,7 @@ function confirmAndGeneratePO() {
   cart = {};                // order placed — empty the cart
   sync();                   // save empty cart, update badge, re-render product cards
   CUST_TYPE = 'OLD';        // reset for next order in this session
+  _RESUMED_CART_DATA = null; // clear any resumed-cart context now that it's been placed
 }
 
 function submitOrderToBackend() {
@@ -4121,6 +4186,7 @@ function submitOrderToBackend() {
       grandTotal: grandTotal, totalQty: totalQty
     },
     isNewCustomer: isNewCustomer,
+    newCustGstApply: NEW_CUST_GST_APPLY,
     placedByEmp:   EMP_PROFILE ? EMP_PROFILE.name : '',
     _t: BACKEND_TOKEN,
     _cid: getClientId(),
