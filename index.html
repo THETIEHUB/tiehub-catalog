@@ -2352,14 +2352,14 @@ function exportCatalogLookbook() {
     + '  if(e.key==="ArrowLeft") lbGo(-1);'
     + '});'
     + 'lbRender();'
-    + '</script>'
+    + '<\/script>'
     + '</body></html>';
 
   win.document.write(html);
   win.document.close();
 }
 
-
+function exportCatalogPDF() {
   var items = getFiltered();  // respects all current filters + sort
   if (!items.length) { alert('No products to export. Adjust your filters.'); return; }
 
@@ -3813,6 +3813,7 @@ function renderVisits() {
     return;
   }
   var todayStr = new Date().toISOString().split('T')[0];
+  var VISIT_STATUSES = ['Interested', 'Not Interested', 'Order Placed', 'Needs Follow-up'];
 
   document.getElementById('emp-visits-list').innerHTML = visits.map(function(v){
     var dateStr = v.ts ? v.ts.split(' ')[0] : '—';
@@ -3825,12 +3826,19 @@ function renderVisits() {
       var label = overdue ? 'Overdue — ' : dueToday ? 'Due today — ' : 'Next follow-up: ';
       followBadge = '<div style="margin-top:5px;font-family:var(--f-ui);font-size:0.62rem;color:' + color + ';font-weight:' + (overdue||dueToday ? '600':'400') + '">' + label + v.next_followup_date + '</div>';
     }
+
+    // One-click action buttons — only show statuses OTHER than the current one
+    var actionButtons = VISIT_STATUSES.filter(function(s){ return s !== v.status; }).map(function(s){
+      return '<button class="oc-btn" onclick="updateVisitStatusClick(\'' + v.visit_id + '\',\'' + s + '\')">' + s + '</button>';
+    }).join('');
+
     return '<div class="order-card" id="visit-' + v.visit_id + '">'
       + '<div>'
       + '<div class="oc-po">' + (v.shop || v.gstin || 'Customer') + '</div>'
       + '<div class="oc-meta">' + dateStr + ' &nbsp;·&nbsp; ' + (v.gstin||'') + ' &nbsp;·&nbsp; by ' + (v.emp_name||'') + '</div>'
       + '<div style="font-family:var(--f-body);font-size:0.82rem;color:var(--ink);margin-top:6px;line-height:1.4">' + (v.remarks || '<em style="color:var(--muted)">No remarks</em>') + '</div>'
       + followBadge
+      + '<div class="oc-actions">' + actionButtons + '</div>'
       + '</div>'
       + '<div style="text-align:right">'
       + '<span class="oc-status ' + stClass + '">' + (v.status||'—') + '</span>'
@@ -3840,6 +3848,25 @@ function renderVisits() {
       + '</div>'
       + '</div>';
   }).join('');
+}
+
+function updateVisitStatusClick(visitId, newStatus) {
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify({ action: 'update_visit_status', visit_id: visitId, status: newStatus, _t: BACKEND_TOKEN })
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok) {
+      var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+      if (v) v.status = newStatus;
+      renderVisits();
+      if (EMP_PROFILE) refreshVisitSummary(EMP_PROFILE);
+    } else {
+      alert('Error: ' + (data.error || 'Could not update status'));
+    }
+  }).catch(function(){
+    alert('Connection error. Please try again.');
+  });
 }
 
 function discardVisit(visitId) {
