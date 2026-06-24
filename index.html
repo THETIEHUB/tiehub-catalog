@@ -2201,6 +2201,19 @@ function exportCatalogLookbook() {
   var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
   var today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
 
+  // ---- Pre-flight check: warn if photos are missing before generating ----
+  var missingPhotoItems = items.filter(function(p){ return !p.img; });
+  if (missingPhotoItems.length) {
+    var proceed = confirm(
+      missingPhotoItems.length + ' of ' + items.length + ' product(s) have no photo and will show as '
+      + '"Image Coming Soon" in the lookbook:\n\n'
+      + missingPhotoItems.slice(0, 8).map(function(p){ return '• ' + p.sku; }).join('\n')
+      + (missingPhotoItems.length > 8 ? '\n…and ' + (missingPhotoItems.length - 8) + ' more' : '')
+      + '\n\nContinue anyway?'
+    );
+    if (!proceed) return;
+  }
+
   // ---- Build product pages: 4 products per page (2x2 grid), photo-only style ----
   var perPage = 4;
   var pages = [];
@@ -2208,12 +2221,12 @@ function exportCatalogLookbook() {
     pages.push(items.slice(i, i + perPage));
   }
 
-  var productPagesHTML = pages.map(function(group){
+  var productPagesHTML = pages.map(function(group, pageIdx){
     var cellsHTML = group.map(function(p){
       var material = (typeof getMaterial === 'function' ? getMaterial(p) : '') || '';
       var imgBlock = p.img
-        ? '<img src="'+p.img+'" onerror="this.parentNode.innerHTML=\'<div class=&quot;lb-noimg&quot;>&#9672;</div>\'">'
-        : '<div class="lb-noimg">&#9672;</div>';
+        ? '<img src="'+p.img+'" onerror="this.parentNode.innerHTML=lbMissingImgHTML();">'
+        : lbMissingImgHTML();
       return '<div class="lb-cell">'
         + '<div class="lb-imgwrap">' + imgBlock + '</div>'
         + '<div class="lb-sku">' + p.sku + '</div>'
@@ -2223,7 +2236,11 @@ function exportCatalogLookbook() {
     // Pad to always have 4 cells so the grid stays even on the last page
     var padCount = perPage - group.length;
     for (var k = 0; k < padCount; k++) cellsHTML += '<div class="lb-cell lb-cell-empty"></div>';
-    return '<div class="lb-page lb-product-page"><div class="lb-grid">' + cellsHTML + '</div></div>';
+    return '<div class="lb-page lb-product-page">'
+      + '<div class="lb-page-head"><span>The Tie Hub</span><span class="lb-page-head-cat">' + catName + '</span></div>'
+      + '<div class="lb-grid">' + cellsHTML + '</div>'
+      + '<div class="lb-page-foot">' + (pageIdx + 2) + '</div>'
+      + '</div>';
   }).join('');
 
   // ---- Cover page ----
@@ -2264,10 +2281,14 @@ function exportCatalogLookbook() {
     + '.lb-btn.primary:hover{background:#A98538}'
 
     // Viewer stage
-    + '.lb-stage{position:absolute;top:54px;bottom:60px;left:0;right:0;display:flex;align-items:center;justify-content:center;perspective:2400px}'
+    + '.lb-stage{position:absolute;top:54px;bottom:60px;left:0;right:0;display:flex;align-items:center;justify-content:center;perspective:2600px}'
     + '.lb-book{position:relative;width:148.5mm;height:210mm;max-width:90vw;max-height:78vh;box-shadow:0 20px 60px rgba(0,0,0,0.5)}'
-    + '.lb-page-el{position:absolute;inset:0;background:#FAF6EF;display:none;transition:transform 0.5s ease, opacity 0.4s ease}'
-    + '.lb-page-el.active{display:block}'
+    + '.lb-page{position:absolute;inset:0;width:100%;height:100%;background:#FAF6EF;backface-visibility:hidden;transform-origin:left center;transform-style:preserve-3d;transition:transform 0.7s cubic-bezier(0.45,0.05,0.55,0.95);will-change:transform;overflow:hidden}'
+    + '.lb-page .lb-page-back{position:absolute;inset:0;background:#F3EDE0;backface-visibility:hidden;transform:rotateY(180deg);box-shadow:inset 8px 0 18px -8px rgba(0,0,0,0.18)}'
+    + '.lb-page.lb-flat-left{transform:rotateY(-180deg)}'
+    + '.lb-page.lb-flat-right{transform:rotateY(0deg)}'
+    + '.lb-page.lb-turning-fwd{transform:rotateY(-180deg)}'
+    + '.lb-page.lb-turning-back{transform:rotateY(0deg)}'
 
     // Bottom nav
     + '.lb-bottombar{position:fixed;bottom:0;left:0;right:0;height:60px;background:#1A1612;display:flex;align-items:center;justify-content:center;gap:18px;border-top:1px solid #3A3128}'
@@ -2277,7 +2298,6 @@ function exportCatalogLookbook() {
     + '.lb-pageindicator{color:#C7BCA3;font-family:"Inter",sans-serif;font-size:9pt;letter-spacing:0.1em;min-width:90px;text-align:center}'
 
     // Page content styles
-    + '.lb-page{width:100%;height:100%;position:relative;overflow:hidden}'
 
     // Cover page
     + '.lb-cover{background:#FAF6EF}'
@@ -2295,16 +2315,22 @@ function exportCatalogLookbook() {
     + '.lb-cover-footer{position:absolute;bottom:18mm;left:0;right:0;text-align:center;font-family:"Inter",sans-serif;font-size:6pt;color:#8A7D6E;letter-spacing:0.08em;line-height:1.8}'
     + '.lb-strong{color:#1A1612;font-weight:500}'
 
-    // Product grid pages
-    + '.lb-product-page{background:#fff;padding:10mm}'
-    + '.lb-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6mm;height:100%}'
+    // Product grid pages — running head + footer so it reads as a bound book
+    + '.lb-product-page{background:#fff;padding:9mm 9mm 7mm;display:flex;flex-direction:column}'
+    + '.lb-page-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:0.5px solid #E5DCC8;padding-bottom:5px;margin-bottom:8mm;font-family:"Inter",sans-serif}'
+    + '.lb-page-head span:first-child{font-family:"Playfair Display",serif;font-size:9pt;letter-spacing:0.1em;color:#1A1612}'
+    + '.lb-page-head-cat{font-size:6.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#8B6F1F}'
+    + '.lb-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:7mm;flex:1;min-height:0}'
     + '.lb-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}'
     + '.lb-cell-empty{visibility:hidden}'
-    + '.lb-imgwrap{width:100%;flex:1;background:#FAF6EF;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #F0E9DA}'
-    + '.lb-imgwrap img{max-width:92%;max-height:92%;object-fit:contain}'
-    + '.lb-noimg{font-size:30pt;color:#D9CDB0;font-family:serif}'
+    + '.lb-imgwrap{width:100%;flex:1;background:#FBF8F1;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #F0E9DA;min-height:0}'
+    + '.lb-imgwrap img{max-width:90%;max-height:90%;object-fit:contain}'
+    + '.lb-noimg-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#C2B58F}'
+    + '.lb-noimg-mark{width:26px;height:26px;border:1px solid #D9CDB0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11pt;font-family:serif}'
+    + '.lb-noimg-label{font-family:"Inter",sans-serif;font-size:6pt;letter-spacing:0.18em;text-transform:uppercase}'
     + '.lb-sku{font-family:"Inter",sans-serif;font-size:7.5pt;letter-spacing:0.1em;color:#1A1612;margin-top:8px;font-weight:500}'
     + '.lb-material{font-family:"Cormorant Garamond",serif;font-size:9pt;color:#8A7D6E;font-style:italic;margin-top:2px}'
+    + '.lb-page-foot{text-align:center;font-family:"Inter",sans-serif;font-size:6.5pt;color:#B7A98A;letter-spacing:0.15em;margin-top:7mm}'
 
     // Print mode — flattens the flipbook into a normal printable document
     + '@media print{'
@@ -2312,7 +2338,8 @@ function exportCatalogLookbook() {
     + '  .lb-topbar,.lb-bottombar{display:none}'
     + '  .lb-stage{position:static;top:auto;bottom:auto;display:block;perspective:none}'
     + '  .lb-book{position:static;width:auto;height:auto;max-width:none;max-height:none;box-shadow:none}'
-    + '  .lb-page-el{position:static;display:block !important;page-break-after:always;width:210mm;height:297mm}'
+    + '  .lb-page{position:static !important;display:block !important;transform:none !important;page-break-after:always;width:210mm;height:297mm}'
+    + '  .lb-page .lb-page-back{display:none !important}'
     + '  @page{size:A4;margin:0}'
     + '}'
     + '</style></head><body>'
@@ -2333,25 +2360,66 @@ function exportCatalogLookbook() {
     + '</div>'
 
     + '<script>'
-    + 'var lbPages = document.querySelectorAll(".lb-page");'
-    + 'var lbCurrent = 0;'
-    + 'lbPages.forEach(function(p,i){ p.classList.toggle("lb-page-el",true); if(i===0) p.classList.add("active"); });'
-    + 'function lbRender(){'
-    + '  lbPages.forEach(function(p,i){ p.classList.toggle("active", i===lbCurrent); });'
-    + '  document.getElementById("lbIndicator").textContent = (lbCurrent+1) + " / " + lbPages.length;'
-    + '  document.getElementById("lbPrev").disabled = lbCurrent===0;'
-    + '  document.getElementById("lbNext").disabled = lbCurrent===lbPages.length-1;'
+    + 'function lbMissingImgHTML(){'
+    + '  return \'<div class="lb-noimg-wrap"><div class="lb-noimg-mark">&#9672;</div><div class="lb-noimg-label">Image Coming Soon</div></div>\';'
+    + '}'
+    + 'var lbPages = Array.prototype.slice.call(document.querySelectorAll(".lb-page"));'
+    + 'var lbTotal = lbPages.length;'
+    + 'var lbCurrent = 0;' // index of the page currently on top of the "still to read" pile (flat-right)
+    + 'var lbAnimating = false;'
+    + 'lbPages.forEach(function(p){'
+    + '  var back = document.createElement("div");'
+    + '  back.className = "lb-page-back";'
+    + '  p.appendChild(back);'
+    + '});'
+    + 'function lbLayout(){'
+    + '  lbPages.forEach(function(p,i){'
+    + '    p.classList.remove("lb-flat-left","lb-flat-right","lb-turning-fwd","lb-turning-back");'
+    + '    if(i < lbCurrent){'
+    + '      p.classList.add("lb-flat-left");'
+    + '      p.style.zIndex = i; ' // earlier pages further back in the "already read" pile
+    + '    } else {'
+    + '      p.classList.add("lb-flat-right");'
+    + '      p.style.zIndex = lbTotal - i; ' // page right after current sits on top of the unread pile
+    + '    }'
+    + '  });'
+    + '  document.getElementById("lbIndicator").textContent = (lbCurrent+1) + " / " + lbTotal;'
+    + '  document.getElementById("lbPrev").disabled = lbCurrent===0 || lbAnimating;'
+    + '  document.getElementById("lbNext").disabled = lbCurrent>=lbTotal-1 || lbAnimating;'
     + '}'
     + 'function lbGo(dir){'
-    + '  var next = lbCurrent + dir;'
-    + '  if(next<0||next>=lbPages.length) return;'
-    + '  lbCurrent = next; lbRender();'
+    + '  if(lbAnimating) return;'
+    + '  if(dir>0 && lbCurrent>=lbTotal-1) return;'
+    + '  if(dir<0 && lbCurrent<=0) return;'
+    + '  lbAnimating = true;'
+    + '  var turningIdx = dir>0 ? lbCurrent : lbCurrent-1;'
+    + '  var turningPage = lbPages[turningIdx];'
+    + '  turningPage.style.zIndex = lbTotal + 5;' // bring the turning page above everything while it flips
+    + '  turningPage.classList.remove("lb-flat-left","lb-flat-right");'
+    + '  if(dir>0){'
+    + '    turningPage.classList.add("lb-flat-right");'
+    + '    requestAnimationFrame(function(){ turningPage.classList.add("lb-turning-fwd"); turningPage.classList.remove("lb-flat-right"); });'
+    + '  } else {'
+    + '    turningPage.classList.add("lb-flat-left");'
+    + '    requestAnimationFrame(function(){ turningPage.classList.add("lb-turning-back"); turningPage.classList.remove("lb-flat-left"); });'
+    + '  }'
+    + '  setTimeout(function(){'
+    + '    lbCurrent = dir>0 ? lbCurrent+1 : lbCurrent-1;'
+    + '    lbAnimating = false;'
+    + '    lbLayout();'
+    + '  }, 700);'
     + '}'
     + 'document.addEventListener("keydown", function(e){'
     + '  if(e.key==="ArrowRight") lbGo(1);'
     + '  if(e.key==="ArrowLeft") lbGo(-1);'
     + '});'
-    + 'lbRender();'
+    + 'document.getElementById("lbBook").addEventListener("click", function(e){'
+    + '  var rect = this.getBoundingClientRect();'
+    + '  var x = e.clientX - rect.left;'
+    + '  if(e.target.closest(".lb-navbtn,.lb-btn")) return;'
+    + '  if(x > rect.width/2) lbGo(1); else lbGo(-1);'
+    + '});'
+    + 'lbLayout();'
     + '<\/script>'
     + '</body></html>';
 
