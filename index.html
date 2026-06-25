@@ -1132,6 +1132,14 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <div class="fg-body" id="filter-patterns"></div>
       </div>
 
+      <!-- SIZE (requires sheet column) -->
+      <div class="filter-group" id="size-filter-group" style="display:none">
+        <div class="fg-head" onclick="toggleFilterGroup(this)">
+          <span>Size</span><span class="fg-arrow">−</span>
+        </div>
+        <div class="fg-body" id="filter-sizes"></div>
+      </div>
+
       <!-- COLOR (requires sheet column) -->
       <div class="filter-group" id="color-filter-group" style="display:none">
         <div class="fg-head" onclick="toggleFilterGroup(this)">
@@ -1497,8 +1505,8 @@ function matchRule(cat, rules) {
   return 'Other';
 }
 
-function getMaterial(p) { return matchRule(p.cat, MATERIAL_RULES); }
-function getStyle(p) { return matchRule(p.cat, STYLE_RULES); }
+function getMaterial(p) { return p.material || matchRule(p.cat, MATERIAL_RULES); }
+function getStyle(p) { return p.style || matchRule(p.cat, STYLE_RULES); }
 
 // ===== AUTO COLOR DETECTION FROM IMAGES =====
 // Detects dominant product color by sampling image pixels (ignoring light background).
@@ -1741,7 +1749,7 @@ function shareFilteredOnWhatsApp() {
   if (prMin2 > 0 || prMax2 < prSliderMax2) {
     filterDesc.push('Rs ' + prMin2.toLocaleString('en-IN') + '–' + (prMax2 >= 10000 ? '10,000+' : prMax2.toLocaleString('en-IN')));
   }
-  ['f-material','f-style','f-color'].forEach(function(name){
+  ['f-material','f-style','f-color','f-pattern','f-size'].forEach(function(name){
     var checked = Array.from(document.querySelectorAll('input[name="'+name+'"]:checked')).map(function(i){return i.value;});
     if (checked.length) filterDesc.push(checked.join(', '));
   });
@@ -1816,6 +1824,10 @@ function getFiltered() {
   const patChecked = Array.from(document.querySelectorAll('input[name="f-pattern"]:checked')).map(i=>i.value);
   if (patChecked.length) list = list.filter(p => p.pattern && patChecked.includes(p.pattern));
 
+  // Size filter (only works if sheet has 'size' column)
+  const sizeChecked = Array.from(document.querySelectorAll('input[name="f-size"]:checked')).map(i=>i.value);
+  if (sizeChecked.length) list = list.filter(p => p.size && sizeChecked.includes(p.size));
+
   // Color filter (only works if sheet has 'color' column)
   const colChecked = Array.from(document.querySelectorAll('input[name="f-color"]:checked')).map(i=>i.value);
   if (colChecked.length) list = list.filter(p => p.color && colChecked.includes(p.color));
@@ -1839,6 +1851,7 @@ function buildFilterSidebar() {
   const matCounts = {};
   const styleCounts = {};
   const patternCounts = {};
+  const sizeCounts = {};
   const colorCounts = {};
   inCat.forEach(p => {
     const m = getMaterial(p);
@@ -1846,6 +1859,7 @@ function buildFilterSidebar() {
     const s = getStyle(p);
     styleCounts[s] = (styleCounts[s] || 0) + 1;
     if (p.pattern) patternCounts[p.pattern] = (patternCounts[p.pattern] || 0) + 1;
+    if (p.size) sizeCounts[p.size] = (sizeCounts[p.size] || 0) + 1;
     if (p.color) colorCounts[p.color] = (colorCounts[p.color] || 0) + 1;
   });
 
@@ -1871,6 +1885,18 @@ function buildFilterSidebar() {
         .join('');
   } else {
     patternGroup.style.display = 'none';
+  }
+
+  // Show Size filter ONLY if sheet has size data
+  const sizeGroup = document.getElementById('size-filter-group');
+  if (Object.keys(sizeCounts).length > 0) {
+    sizeGroup.style.display = 'block';
+    document.getElementById('filter-sizes').innerHTML =
+      Object.entries(sizeCounts).sort((a,b)=>b[1]-a[1])
+        .map(([sz,c]) => `<label class="fopt"><input type="checkbox" name="f-size" value="${sz}" onchange="renderProducts()"> ${sz}<span class="fopt-count">${c}</span></label>`)
+        .join('');
+  } else {
+    sizeGroup.style.display = 'none';
   }
 
   // Show Color filter — auto-detected from images
@@ -2065,6 +2091,9 @@ function renderActiveFilters() {
   document.querySelectorAll('input[name="f-pattern"]:checked').forEach(cb => {
     chips.push({type:'pattern', value:cb.value, label:cb.value, el:cb});
   });
+  document.querySelectorAll('input[name="f-size"]:checked').forEach(cb => {
+    chips.push({type:'size', value:cb.value, label:cb.value, el:cb});
+  });
   document.querySelectorAll('input[name="f-color"]:checked').forEach(cb => {
     chips.push({type:'color', value:cb.value, label:cb.value, el:cb});
   });
@@ -2254,6 +2283,7 @@ function exportCatalogLookbook() {
       if (material) specParts.push('<div><span class="lb-spec-lbl">Material</span>' + material + '</div>');
       if (p.color)  specParts.push('<div><span class="lb-spec-lbl">Color</span>' + p.color + '</div>');
       if (p.pattern) specParts.push('<div><span class="lb-spec-lbl">Pattern</span>' + p.pattern + '</div>');
+      if (p.size)   specParts.push('<div><span class="lb-spec-lbl">Size</span>' + p.size + '</div>');
       var specRow = specParts.length ? '<div class="lb-spec-row">' + specParts.join('') + '</div>' : '';
       return '<div class="lb-cell">'
         + '<div class="lb-imgwrap">' + imgBlock + '</div>'
@@ -2504,7 +2534,7 @@ function exportCatalogPDF() {
   if (prMin3 > 0 || prMax3 < prSliderMax3) {
     filterDesc.push('Price: Rs ' + prMin3.toLocaleString('en-IN') + ' – Rs ' + (prMax3 >= 10000 ? '10,000+' : prMax3.toLocaleString('en-IN')));
   }
-  ['f-material','f-style','f-color','f-pattern'].forEach(function(name){
+  ['f-material','f-style','f-color','f-pattern','f-size'].forEach(function(name){
     var checked = Array.from(document.querySelectorAll('input[name="'+name+'"]:checked')).map(function(i){return i.value;});
     if (checked.length) filterDesc.push(checked.join(', '));
   });
