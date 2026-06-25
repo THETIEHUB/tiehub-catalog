@@ -2195,8 +2195,17 @@ function loadMore() { displayLimit += 80; renderProducts(); }
 
 // ===== EXPORT FILTERED PRODUCTS AS PDF =====
 function exportCatalogLookbook() {
+  // Open the popup window immediately, synchronously, on the click — before any
+  // confirm()/alert() dialogs run. Browsers (especially Incognito mode) will
+  // silently block window.open() if it happens after other blocking calls.
+  var win = window.open('', '_blank');
+  if (!win) {
+    alert('Your browser blocked the Lookbook pop-up.\n\nPlease allow pop-ups for this site (look for a blocked pop-up icon in the address bar) and click Lookbook again.');
+    return;
+  }
+
   var items = getFiltered();  // respects all current filters + sort
-  if (!items.length) { alert('No products to show. Adjust your filters.'); return; }
+  if (!items.length) { win.close(); alert('No products to show. Adjust your filters.'); return; }
 
   var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
   var today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
@@ -2211,7 +2220,7 @@ function exportCatalogLookbook() {
       + (missingPhotoItems.length > 8 ? '\n…and ' + (missingPhotoItems.length - 8) + ' more' : '')
       + '\n\nContinue anyway?'
     );
-    if (!proceed) return;
+    if (!proceed) { win.close(); return; }
   }
 
   // ---- Build product pages: 4 products per page (2x2 grid), photo-only style ----
@@ -2287,7 +2296,6 @@ function exportCatalogLookbook() {
   var allPagesHTML = coverHTML + productPagesHTML + closingHTML;
   var totalPages = pages.length + 2;
 
-  var win = window.open('', '_blank');
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>The Tie Hub — ' + catName + ' Lookbook</title>'
     + '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Playfair+Display:wght@500;600&family=DM+Serif+Display&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">'
     + '<style>'
@@ -2461,8 +2469,16 @@ function exportCatalogLookbook() {
 }
 
 function exportCatalogPDF() {
+  // Open the popup window immediately, synchronously, on the click — before any
+  // other work runs — so browsers (especially Incognito mode) don't block it.
+  var win = window.open('', '_blank');
+  if (!win) {
+    alert('Your browser blocked the export pop-up.\n\nPlease allow pop-ups for this site (look for a blocked pop-up icon in the address bar) and click Export PDF again.');
+    return;
+  }
+
   var items = getFiltered();  // respects all current filters + sort
-  if (!items.length) { alert('No products to export. Adjust your filters.'); return; }
+  if (!items.length) { win.close(); alert('No products to export. Adjust your filters.'); return; }
 
   // Build active filter description for the header
   var filterDesc = [];
@@ -2503,7 +2519,6 @@ function exportCatalogPDF() {
       + '</div></div>';
   }).join('');
 
-  var win = window.open('', '_blank');
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>The Tie Hub - '+catName+'</title>'
     + '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Playfair+Display:wght@500;600&family=DM+Serif+Display&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">'
     + '<style>'
