@@ -3940,6 +3940,10 @@ function visitStatusClass(status) {
   if (key === 'notinterested') return 'vs-notinterested';
   if (key === 'orderplaced') return 'vs-orderplaced';
   if (key === 'needsfollowup') return 'vs-needsfollowup';
+  // Real FMS inquiry statuses, mapped onto the same visual language
+  if (key === 'pendingneedtofollowup') return 'vs-needsfollowup';
+  if (key === 'completeinquiryconverted') return 'vs-orderplaced';
+  if (key === 'cancelled') return 'vs-notinterested';
   return 'vs-needsfollowup';
 }
 
@@ -3972,26 +3976,34 @@ function renderVisits() {
   }
   var todayStr = new Date().toISOString().split('T')[0];
   var VISIT_STATUSES = ['Interested', 'Not Interested', 'Order Placed', 'Needs Follow-up'];
+  var INQUIRY_STATUSES = ['Pending (Need to follow up)', 'Complete (Inquiry converted)', 'Cancelled'];
+  var TERMINAL_STATUSES = ['Not Interested', 'Order Placed', 'Cancelled', 'Complete (Inquiry converted)'];
+  var isManager = EMP_PROFILE && EMP_PROFILE.role === 'manager';
 
   var rows = visits.map(function(v){
     var dateStr = v.ts ? v.ts.split(' ')[0] : '—';
     var stClass = visitStatusClass(v.status);
     var isInquiry = v.entry_type === 'inquiry';
-    var inqBadge = isInquiry ? '<span style="background:#8B6F1F;color:#fff;font-family:var(--f-ui);font-size:0.52rem;letter-spacing:0.08em;text-transform:uppercase;padding:2px 6px;margin-left:6px;border-radius:2px;white-space:nowrap">New Inquiry</span>' : '';
+    var inqBadge = isInquiry ? '<span style="background:#8B6F1F;color:#fff;font-family:var(--f-ui);font-size:0.52rem;letter-spacing:0.08em;text-transform:uppercase;padding:2px 6px;margin-left:6px;border-radius:2px;white-space:nowrap">' + (v.inquiry_no || 'Inquiry') + '</span>' : '';
 
     var detailsBits = [];
     if (isInquiry) {
-      if (v.phone) detailsBits.push(v.phone);
       if (v.source_channel) detailsBits.push(v.source_channel);
-      if (v.product_interest) detailsBits.push(v.product_interest);
+      if (v.phone) detailsBits.push(v.phone);
+      if (v.email) detailsBits.push(v.email);
     } else {
       if (v.gstin) detailsBits.push(v.gstin);
     }
     var details = detailsBits.join(' · ') || '—';
 
+    var remarksHTML = v.remarks ? '<div style="white-space:pre-line;font-size:0.78rem;margin-top:3px">' + v.remarks + '</div>' : '';
+    var remarksOrDetails = isInquiry
+      ? (v.product_interest || '<em style="color:var(--muted)">—</em>') + remarksHTML
+      : ('<em style="color:var(--muted)">' + (v.remarks ? '' : 'No remarks') + '</em>') + remarksHTML;
+
     var amtCell = v.order_amount
-      ? '₹' + Number(v.order_amount).toLocaleString('en-IN')
-      : (v.inquiry_value ? '₹' + Number(v.inquiry_value).toLocaleString('en-IN') + ' <span style="color:var(--muted)">(est.)</span>' : '—');
+      ? '₹' + Number(v.order_amount).toLocaleString('en-IN') + (v.closing_date ? '<div style="font-size:0.65rem;color:var(--muted)">Closed ' + v.closing_date + '</div>' : '')
+      : '—';
 
     // Follow-up date cell — collapsed by default, opens a date picker only on click
     var fuCell;
@@ -4012,25 +4024,43 @@ function renderVisits() {
       fuCell = '<span style="color:var(--muted)">Not set</span> <button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')">+ Set</button>';
     }
 
-    var statusButtons = VISIT_STATUSES.filter(function(s){ return s !== v.status; }).map(function(s){
-      if (s === 'Order Placed') return '<button class="oc-btn" onclick="markOrderPlaced(\'' + v.visit_id + '\')">' + s + '</button>';
-      return '<button class="oc-btn" onclick="updateVisitStatusClick(\'' + v.visit_id + '\',\'' + s + '\')">' + s + '</button>';
-    }).join('');
+    // Once a row reaches a terminal status, status buttons disappear for good —
+    // only a manager can reopen it (mistakes happen, but reopening is deliberate).
+    var isLocked = TERMINAL_STATUSES.indexOf(v.status) !== -1;
+    var actionsHTML;
+    if (isLocked) {
+      actionsHTML = '<span style="font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)">Closed</span>'
+        + (isManager ? ' <button class="oc-btn" onclick="reopenVisit(\'' + v.visit_id + '\')">↺ Reopen</button>' : '')
+        + ' <button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
+    } else {
+      var statusList = isInquiry ? INQUIRY_STATUSES : VISIT_STATUSES;
+      var statusButtons = statusList.filter(function(s){ return s !== v.status; }).map(function(s){
+        if (s === 'Order Placed') return '<button class="oc-btn" onclick="markOrderPlaced(\'' + v.visit_id + '\')">Order Placed</button>';
+        if (s === 'Complete (Inquiry converted)') return '<button class="oc-btn" onclick="markInquiryComplete(\'' + v.visit_id + '\')">Complete</button>';
+        if (s === 'Cancelled') return '<button class="oc-btn" onclick="markInquiryCancelled(\'' + v.visit_id + '\')">Cancelled</button>';
+        if (s === 'Pending (Need to follow up)') return '<button class="oc-btn" onclick="updateVisitStatusClick(\'' + v.visit_id + '\',\'' + s + '\')">Pending</button>';
+        if (s === 'Interested') return '<button class="oc-btn" onclick="markInterested(\'' + v.visit_id + '\')">Interested</button>';
+        if (s === 'Not Interested') return '<button class="oc-btn" onclick="markNotInterested(\'' + v.visit_id + '\')">Not Interested</button>';
+        if (s === 'Needs Follow-up') return '<button class="oc-btn" onclick="markNeedsFollowup(\'' + v.visit_id + '\')">Needs Follow-up</button>';
+        return '<button class="oc-btn" onclick="updateVisitStatusClick(\'' + v.visit_id + '\',\'' + s + '\')">' + s + '</button>';
+      }).join('');
+      actionsHTML = statusButtons + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
+    }
 
     return '<tr>'
       + '<td>' + (v.shop || v.gstin || 'Customer') + inqBadge + '<div style="font-size:0.68rem;color:var(--muted);margin-top:2px">' + dateStr + ' · by ' + (v.emp_name||'') + '</div></td>'
       + '<td>' + details + '</td>'
-      + '<td style="max-width:220px">' + (v.remarks ? v.remarks : '<em style="color:var(--muted)">—</em>') + '</td>'
+      + '<td style="max-width:240px">' + remarksOrDetails + '</td>'
       + '<td class="num">' + amtCell + '</td>'
       + '<td><span class="oc-status ' + stClass + '">' + (v.status||'—') + '</span></td>'
       + '<td style="white-space:nowrap">' + fuCell + '</td>'
-      + '<td><div class="oc-actions" style="justify-content:flex-start">' + statusButtons + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button></div></td>'
+      + '<td><div class="oc-actions" style="justify-content:flex-start">' + actionsHTML + '</div></td>'
       + '</tr>';
   }).join('');
 
   document.getElementById('emp-visits-list').innerHTML =
     '<div style="overflow-x:auto"><table class="po-tbl"><thead><tr>'
-    + '<th>Customer</th><th>Details</th><th>Remarks</th><th class="num">Amount</th>'
+    + '<th>Customer</th><th>Channel / Contact</th><th>Details / Remarks</th><th class="num">Order Amount</th>'
     + '<th>Status</th><th>Next Follow-up</th><th>Actions</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
@@ -4060,6 +4090,109 @@ function markOrderPlaced(visitId) {
       alert('Error: ' + (data.error || 'Could not update'));
     }
   }).catch(function(){ alert('Connection error. Please try again.'); });
+}
+
+function markInquiryComplete(visitId) {
+  var amt = prompt('Order Amount (₹):', '');
+  if (amt === null) return; // cancelled
+  amt = String(amt).replace(/,/g, '').trim();
+  if (amt && isNaN(Number(amt))) { alert('Please enter a valid number.'); return; }
+
+  var todayStr = new Date().toISOString().split('T')[0];
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify({ action: 'update_visit_status', visit_id: visitId, status: 'Complete (Inquiry converted)', order_amount: amt, closing_date: todayStr, _t: BACKEND_TOKEN })
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok) {
+      var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+      if (v) { v.status = 'Complete (Inquiry converted)'; v.order_amount = amt; v.closing_date = todayStr; }
+      renderVisits();
+      if (EMP_PROFILE) refreshVisitSummary(EMP_PROFILE);
+    } else {
+      alert('Error: ' + (data.error || 'Could not update'));
+    }
+  }).catch(function(){ alert('Connection error. Please try again.'); });
+}
+
+function markInquiryCancelled(visitId) {
+  var reason = prompt('Reason for cancelling:', '');
+  if (reason === null) return; // cancelled the prompt itself
+
+  var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+  var combined = appendRemark_(v ? v.remarks : '', 'Cancelled', reason);
+  postStatusUpdate_(visitId, { status: 'Cancelled', remarks: combined }, function(){
+    if (v) { v.status = 'Cancelled'; v.remarks = combined; }
+  });
+}
+
+// Builds an append-only remarks trail: keeps prior notes, adds a new dated line.
+function appendRemark_(existing, label, note) {
+  var dateLabel = new Date().toLocaleDateString('en-IN', {day:'2-digit', month:'short'});
+  var line = '[' + dateLabel + ' · ' + label + ']' + (note ? ' ' + note : '');
+  return existing ? existing + '\n' + line : line;
+}
+
+function postStatusUpdate_(visitId, fields, onSuccess) {
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify(Object.assign({ action: 'update_visit_status', visit_id: visitId, _t: BACKEND_TOKEN }, fields))
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok) {
+      onSuccess();
+      renderVisits();
+      if (EMP_PROFILE) refreshVisitSummary(EMP_PROFILE);
+    } else {
+      alert('Error: ' + (data.error || 'Could not update'));
+    }
+  }).catch(function(){ alert('Connection error. Please try again.'); });
+}
+
+function markInterested(visitId) {
+  var remark = prompt('Remark — what makes this customer interested?', '');
+  if (remark === null) return;
+  var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+  var combined = appendRemark_(v ? v.remarks : '', 'Interested', remark);
+  postStatusUpdate_(visitId, { status: 'Interested', remarks: combined }, function(){
+    if (v) { v.status = 'Interested'; v.remarks = combined; }
+  });
+}
+
+function markNotInterested(visitId) {
+  var reason = prompt('Why is the customer not interested? (this will close the entry)', '');
+  if (reason === null) return;
+  var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+  var combined = appendRemark_(v ? v.remarks : '', 'Not Interested', reason);
+  postStatusUpdate_(visitId, { status: 'Not Interested', remarks: combined }, function(){
+    if (v) { v.status = 'Not Interested'; v.remarks = combined; }
+  });
+}
+
+function markNeedsFollowup(visitId) {
+  var reason = prompt('Why do you need to reconnect with this customer?', '');
+  if (reason === null) return;
+  var dateStr = prompt('Next follow-up date (YYYY-MM-DD):', '');
+  if (dateStr === null) return;
+  dateStr = dateStr.trim();
+  if (dateStr && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) { alert('Please enter the date as YYYY-MM-DD.'); return; }
+
+  var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+  var combined = appendRemark_(v ? v.remarks : '', 'Needs Follow-up', reason);
+  postStatusUpdate_(visitId, { status: 'Needs Follow-up', remarks: combined, next_followup_date: dateStr }, function(){
+    if (v) { v.status = 'Needs Follow-up'; v.remarks = combined; if (dateStr) v.next_followup_date = dateStr; }
+  });
+}
+
+function reopenVisit(visitId) {
+  var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+  if (!v) return;
+  if (!confirm('Reopen this entry? It will go back to an active status.')) return;
+  var newStatus = v.entry_type === 'inquiry' ? 'Pending (Need to follow up)' : 'Needs Follow-up';
+  var combined = appendRemark_(v.remarks, 'Reopened by ' + (EMP_PROFILE ? EMP_PROFILE.name : 'manager'), '');
+  postStatusUpdate_(visitId, { status: newStatus, remarks: combined }, function(){
+    v.status = newStatus; v.remarks = combined;
+  });
 }
 
 function updateFollowupClick(visitId) {
@@ -4229,42 +4362,34 @@ function openLogInquiryModal() {
     + '</div>'
     + '<div style="padding:1.5rem 1.8rem">'
 
-    + '<label class="fl">Customer / Prospect Name</label>'
+    + '<label class="fl">Inquiry Generated From Which Channel?</label>'
+    + '<select class="fi" id="inq-channel">'
+    + '<option value="Direct Customer New">Direct Customer New</option>'
+    + '<option value="Direct Customer Existing">Direct Customer Existing</option>'
+    + '<option value="Retailer CRR">Retailer CRR</option>'
+    + '<option value="Retailer NBD">Retailer NBD</option>'
+    + '<option value="Corporate">Corporate</option>'
+    + '<option value="Stylist">Stylist</option>'
+    + '<option value="OldClient">OldClient</option>'
+    + '<option value="B2B Exhibition">B2B Exhibition</option>'
+    + '</select>'
+
+    + '<label class="fl">Name of Customer</label>'
     + '<input class="fi" id="inq-name" type="text" placeholder="Name of person or business">'
 
     + '<label class="fl">Phone Number</label>'
     + '<input class="fi" id="inq-phone" type="text" placeholder="10-digit mobile number">'
 
-    + '<label class="fl">Source Channel</label>'
-    + '<select class="fi" id="inq-channel">'
-    + '<option value="Walk-in">Walk-in</option>'
-    + '<option value="WhatsApp">WhatsApp</option>'
-    + '<option value="Phone Call">Phone Call</option>'
-    + '<option value="Referral">Referral</option>'
-    + '<option value="Exhibition">Exhibition</option>'
-    + '<option value="Website / Online">Website / Online</option>'
-    + '<option value="Other">Other</option>'
-    + '</select>'
+    + '<label class="fl">Email Address (optional)</label>'
+    + '<input class="fi" id="inq-email" type="email" placeholder="customer@example.com">'
 
-    + '<label class="fl">Product Interest</label>'
-    + '<input class="fi" id="inq-product" type="text" placeholder="e.g. Neckties, Cufflinks, 50 pcs custom order">'
+    + '<label class="fl">Details of Inquiry (Product, Quantity, Time, Budget)</label>'
+    + '<textarea class="fi" id="inq-product" rows="2" placeholder="e.g. 50 pcs custom bowties, needed by next month" style="resize:vertical;font-family:var(--f-body)"></textarea>'
 
-    + '<label class="fl">Inquiry Value ₹ (approx.)</label>'
-    + '<input class="fi" id="inq-value" type="number" placeholder="0">'
+    + '<label class="fl">What is Requirement Date?</label>'
+    + '<input class="fi" id="inq-req-date" type="date">'
 
-    + '<label class="fl">Status</label>'
-    + '<select class="fi" id="inq-status">'
-    + '<option value="Needs Follow-up" selected>Needs Follow-up</option>'
-    + '<option value="Interested">Interested</option>'
-    + '<option value="Not Interested">Not Interested</option>'
-    + '<option value="Order Placed">Order Placed</option>'
-    + '</select>'
-
-    + '<label class="fl">Remarks</label>'
-    + '<textarea class="fi" id="inq-remarks" rows="3" placeholder="What did the customer ask for..." style="resize:vertical;font-family:var(--f-body)"></textarea>'
-
-    + '<label class="fl">Next Follow-up Date</label>'
-    + '<input class="fi" id="inq-followup-date" type="date">'
+    + '<div style="font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.05em;color:var(--muted);margin:0.8rem 0 1rem;padding:0.6rem 0.8rem;background:var(--border);border-left:2px solid #8B6F1F">This inquiry will start as <strong>Pending (Need to follow up)</strong>. Update its status once you\'ve connected with the customer.</div>'
 
     + '<button id="inq-save-btn" onclick="submitInquiry()" style="width:100%;margin-top:0.5rem;background:#8B6F1F;color:var(--cream);border:none;padding:0.9rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:background 0.2s" onmouseover="this.style.background=\'var(--gold)\'" onmouseout="this.style.background=\'#8B6F1F\'">Save Inquiry</button>'
     + '<div id="inquiry-error" style="display:none;color:#C0392B;font-family:var(--f-ui);font-size:0.7rem;margin-top:0.6rem"></div>'
@@ -4276,14 +4401,12 @@ function submitInquiry() {
   var name = document.getElementById('inq-name').value.trim();
   var phone = document.getElementById('inq-phone').value.trim();
   var channel = document.getElementById('inq-channel').value;
+  var email = document.getElementById('inq-email').value.trim();
   var product = document.getElementById('inq-product').value.trim();
-  var value = document.getElementById('inq-value').value;
-  var status = document.getElementById('inq-status').value;
-  var remarks = document.getElementById('inq-remarks').value.trim();
-  var followupDate = document.getElementById('inq-followup-date').value;
+  var reqDate = document.getElementById('inq-req-date').value;
   var errEl = document.getElementById('inquiry-error');
 
-  if (!name) { errEl.textContent = 'Please enter the customer/prospect name.'; errEl.style.display = 'block'; return; }
+  if (!name) { errEl.textContent = 'Please enter the customer name.'; errEl.style.display = 'block'; return; }
 
   var btn = document.getElementById('inq-save-btn');
   if (btn.disabled) return; // already submitting — ignore extra clicks
@@ -4295,14 +4418,13 @@ function submitInquiry() {
     emp_name: EMP_PROFILE ? EMP_PROFILE.name : '',
     gstin: '',
     shop: name,
-    status: status,
-    remarks: remarks,
-    next_followup_date: followupDate,
+    remarks: '',
+    next_followup_date: reqDate, // requirement date doubles as the first follow-up target
     entry_type: 'inquiry',
     phone: phone,
+    email: email,
     product_interest: product,
     source_channel: channel,
-    inquiry_value: value,
     _t: BACKEND_TOKEN
   };
 
