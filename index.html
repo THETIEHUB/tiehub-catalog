@@ -2227,10 +2227,15 @@ function exportCatalogLookbook() {
       var imgBlock = p.img
         ? '<img src="'+p.img+'" onerror="this.parentNode.innerHTML=lbMissingImgHTML();">'
         : lbMissingImgHTML();
+      // Color/pattern only show when actually present in the product data — never invented
+      var specParts = [];
+      if (material) specParts.push('<div><span class="lb-spec-lbl">Material</span>' + material + '</div>');
+      if (p.color)  specParts.push('<div><span class="lb-spec-lbl">Color</span>' + p.color + '</div>');
+      if (p.pattern) specParts.push('<div><span class="lb-spec-lbl">Pattern</span>' + p.pattern + '</div>');
+      var specRow = specParts.length ? '<div class="lb-spec-row">' + specParts.join('') + '</div>' : '';
       return '<div class="lb-cell">'
         + '<div class="lb-imgwrap">' + imgBlock + '</div>'
-        + '<div class="lb-sku">' + p.sku + '</div>'
-        + (material ? '<div class="lb-material">' + material + '</div>' : '')
+        + '<div class="lb-info"><div class="lb-sku">' + p.sku + '</div>' + specRow + '</div>'
         + '</div>';
     }).join('');
     // Pad to always have 4 cells so the grid stays even on the last page
@@ -2260,8 +2265,27 @@ function exportCatalogLookbook() {
     + '<div>Mumbai, Maharashtra &middot; GSTIN 27AYNPK2735R1ZM &middot; Ph 26130975</div>'
     + '</div></div>';
 
-  var allPagesHTML = coverHTML + productPagesHTML;
-  var totalPages = pages.length + 1;
+  // ---- Closing page — mirrors the cover's frame treatment, closes the catalog with ordering info ----
+  var closingHTML = '<div class="lb-page lb-cover lb-back">'
+    + '<div class="lb-frame"></div>'
+    + '<div class="lb-cover-content">'
+    + '<div class="lb-emblem"><div class="lb-emblem-inner">&#8982;</div></div>'
+    + '<div class="lb-back-thanks">Thank You</div>'
+    + '<div class="lb-divider"></div>'
+    + '<div class="lb-back-note">To place an order or request further details on any<br>product in this catalog, please reach out to us directly.</div>'
+    + '<div class="lb-back-contact">'
+    + '<div class="lb-back-contact-row"><span class="lb-spec-lbl">Phone</span>26130975</div>'
+    + '<div class="lb-back-contact-row"><span class="lb-spec-lbl">Email</span>orders@thetiehub.com</div>'
+    + '<div class="lb-back-contact-row"><span class="lb-spec-lbl">Address</span>Mumbai, Maharashtra</div>'
+    + '</div>'
+    + '</div>'
+    + '<div class="lb-cover-footer">'
+    + '<div class="lb-strong">The Tie Hub &middot; By Big Five Inc.</div>'
+    + '<div>GSTIN 27AYNPK2735R1ZM &middot; B2B Wholesale Catalog</div>'
+    + '</div></div>';
+
+  var allPagesHTML = coverHTML + productPagesHTML + closingHTML;
+  var totalPages = pages.length + 2;
 
   var win = window.open('', '_blank');
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>The Tie Hub — ' + catName + ' Lookbook</title>'
@@ -2320,17 +2344,26 @@ function exportCatalogLookbook() {
     + '.lb-page-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:0.5px solid #E5DCC8;padding-bottom:5px;margin-bottom:8mm;font-family:"Inter",sans-serif}'
     + '.lb-page-head span:first-child{font-family:"Playfair Display",serif;font-size:9pt;letter-spacing:0.1em;color:#1A1612}'
     + '.lb-page-head-cat{font-size:6.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#8B6F1F}'
-    + '.lb-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:7mm;flex:1;min-height:0}'
-    + '.lb-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}'
-    + '.lb-cell-empty{visibility:hidden}'
-    + '.lb-imgwrap{width:100%;flex:1;background:#FBF8F1;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #F0E9DA;min-height:0}'
-    + '.lb-imgwrap img{max-width:90%;max-height:90%;object-fit:contain}'
+    + '.lb-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6mm;flex:1;min-height:0}'
+    + '.lb-cell{display:flex;flex-direction:column;border:0.5px solid #F0E9DA;min-height:0}'
+    + '.lb-cell-empty{visibility:hidden;border:none}'
+    + '.lb-imgwrap{width:100%;flex:1;background:#FBF8F1;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:0.5px solid #F0E9DA;min-height:0}'
+    + '.lb-imgwrap img{max-width:88%;max-height:88%;object-fit:contain}'
     + '.lb-noimg-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#C2B58F}'
     + '.lb-noimg-mark{width:26px;height:26px;border:1px solid #D9CDB0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11pt;font-family:serif}'
     + '.lb-noimg-label{font-family:"Inter",sans-serif;font-size:6pt;letter-spacing:0.18em;text-transform:uppercase}'
-    + '.lb-sku{font-family:"Inter",sans-serif;font-size:7.5pt;letter-spacing:0.1em;color:#1A1612;margin-top:8px;font-weight:500}'
-    + '.lb-material{font-family:"Cormorant Garamond",serif;font-size:9pt;color:#8A7D6E;font-style:italic;margin-top:2px}'
+    + '.lb-info{padding:7px 9px 8px}'
+    + '.lb-sku{font-family:"Inter",sans-serif;font-size:7pt;letter-spacing:0.08em;color:#8B6F1F;font-weight:600}'
+    + '.lb-spec-row{display:flex;flex-wrap:wrap;gap:10px;font-family:"Inter",sans-serif;font-size:6.5pt;color:#7A6E5C;margin-top:5px;border-top:0.5px dashed #E5DCC8;padding-top:5px}'
+    + '.lb-spec-row div{line-height:1.4}'
+    + '.lb-spec-lbl{color:#B7A98A;text-transform:uppercase;letter-spacing:0.4px;font-size:5.8pt;display:block}'
     + '.lb-page-foot{text-align:center;font-family:"Inter",sans-serif;font-size:6.5pt;color:#B7A98A;letter-spacing:0.15em;margin-top:7mm}'
+
+    // Closing/back page — mirrors cover frame, different content block
+    + '.lb-back-thanks{font-family:"Playfair Display",serif;font-size:22pt;font-weight:500;letter-spacing:0.06em;color:#1A1612;font-style:italic}'
+    + '.lb-back-note{font-family:"Cormorant Garamond",serif;font-size:11pt;color:#7A6E5C;line-height:1.6;margin:18px 0 22px}'
+    + '.lb-back-contact{display:flex;flex-direction:column;gap:9px;align-items:center}'
+    + '.lb-back-contact-row{font-family:"Inter",sans-serif;font-size:9pt;color:#1A1612;display:flex;flex-direction:column;align-items:center;gap:2px}'
 
     // Print mode — flattens the flipbook into a normal printable document
     + '@media print{'
