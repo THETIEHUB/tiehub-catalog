@@ -969,7 +969,10 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <div id="emp-visits-tab" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.6rem">
         <div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted);letter-spacing:0.05em">Track customer visits and upcoming follow-ups</div>
-        <button onclick="openLogVisitModal()" style="background:var(--dark);color:var(--cream);border:none;padding:0.55rem 1.1rem;font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;font-weight:500">+ Log a Visit</button>
+        <div style="display:flex;gap:0.6rem">
+          <button onclick="openLogInquiryModal()" style="background:#8B6F1F;color:var(--cream);border:none;padding:0.55rem 1.1rem;font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;font-weight:500">+ Log New Inquiry</button>
+          <button onclick="openLogVisitModal()" style="background:var(--dark);color:var(--cream);border:none;padding:0.55rem 1.1rem;font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;font-weight:500">+ Log a Visit</button>
+        </div>
       </div>
 
       <div style="display:flex;gap:0.7rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -3948,10 +3951,25 @@ function renderVisits() {
       return '<button class="oc-btn" onclick="updateVisitStatusClick(\'' + v.visit_id + '\',\'' + s + '\')">' + s + '</button>';
     }).join('');
 
+    var isInquiry = v.entry_type === 'inquiry';
+    var inqBadge = isInquiry ? '<span style="background:#8B6F1F;color:#fff;font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.1em;text-transform:uppercase;padding:2px 7px;margin-left:8px;border-radius:2px;vertical-align:middle">New Inquiry</span>' : '';
+
+    var metaLine;
+    if (isInquiry) {
+      var bits = [];
+      if (v.phone) bits.push(v.phone);
+      if (v.source_channel) bits.push(v.source_channel);
+      if (v.product_interest) bits.push(v.product_interest);
+      if (v.inquiry_value) bits.push('₹' + Number(v.inquiry_value).toLocaleString('en-IN'));
+      metaLine = dateStr + (bits.length ? ' &nbsp;·&nbsp; ' + bits.join(' &nbsp;·&nbsp; ') : '') + ' &nbsp;·&nbsp; by ' + (v.emp_name||'');
+    } else {
+      metaLine = dateStr + ' &nbsp;·&nbsp; ' + (v.gstin||'') + ' &nbsp;·&nbsp; by ' + (v.emp_name||'');
+    }
+
     return '<div class="order-card" id="visit-' + v.visit_id + '">'
       + '<div>'
-      + '<div class="oc-po">' + (v.shop || v.gstin || 'Customer') + '</div>'
-      + '<div class="oc-meta">' + dateStr + ' &nbsp;·&nbsp; ' + (v.gstin||'') + ' &nbsp;·&nbsp; by ' + (v.emp_name||'') + '</div>'
+      + '<div class="oc-po">' + (v.shop || v.gstin || 'Customer') + inqBadge + '</div>'
+      + '<div class="oc-meta">' + metaLine + '</div>'
       + '<div style="font-family:var(--f-body);font-size:0.82rem;color:var(--ink);margin-top:6px;line-height:1.4">' + (v.remarks || '<em style="color:var(--muted)">No remarks</em>') + '</div>'
       + followBadge
       + '<div class="oc-actions">' + actionButtons + '</div>'
@@ -4066,6 +4084,7 @@ function submitVisit() {
     status: status,
     remarks: remarks,
     next_followup_date: followupDate,
+    entry_type: 'visit',
     _t: BACKEND_TOKEN
   };
 
@@ -4080,6 +4099,114 @@ function submitVisit() {
       if (EMP_PROFILE) refreshVisitSummary(EMP_PROFILE);
     } else {
       errEl.textContent = data.error || 'Could not save visit.';
+      errEl.style.display = 'block';
+    }
+  }).catch(function(){
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block';
+  });
+}
+
+// ---- NEW INQUIRY (prospect — not yet a customer) ---------------------------
+function openLogInquiryModal() {
+  var existing = document.getElementById('inquiry-modal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'inquiry-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,16,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML =
+    '<div style="background:var(--cream);max-width:480px;width:100%;border-top:3px solid #8B6F1F;max-height:90vh;overflow-y:auto">'
+    + '<div style="padding:1.3rem 1.8rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+    + '<div style="font-family:var(--f-display);font-size:1.25rem;font-weight:500;color:var(--dark)">Log New Inquiry</div>'
+    + '<button onclick="document.getElementById(\'inquiry-modal\').remove()" style="background:none;border:1px solid var(--border2);color:var(--muted);width:30px;height:30px;cursor:pointer;font-size:1.1rem">&times;</button>'
+    + '</div>'
+    + '<div style="padding:1.5rem 1.8rem">'
+
+    + '<label class="fl">Customer / Prospect Name</label>'
+    + '<input class="fi" id="inq-name" type="text" placeholder="Name of person or business">'
+
+    + '<label class="fl">Phone Number</label>'
+    + '<input class="fi" id="inq-phone" type="text" placeholder="10-digit mobile number">'
+
+    + '<label class="fl">Source Channel</label>'
+    + '<select class="fi" id="inq-channel">'
+    + '<option value="Walk-in">Walk-in</option>'
+    + '<option value="WhatsApp">WhatsApp</option>'
+    + '<option value="Phone Call">Phone Call</option>'
+    + '<option value="Referral">Referral</option>'
+    + '<option value="Exhibition">Exhibition</option>'
+    + '<option value="Website / Online">Website / Online</option>'
+    + '<option value="Other">Other</option>'
+    + '</select>'
+
+    + '<label class="fl">Product Interest</label>'
+    + '<input class="fi" id="inq-product" type="text" placeholder="e.g. Neckties, Cufflinks, 50 pcs custom order">'
+
+    + '<label class="fl">Inquiry Value ₹ (approx.)</label>'
+    + '<input class="fi" id="inq-value" type="number" placeholder="0">'
+
+    + '<label class="fl">Status</label>'
+    + '<select class="fi" id="inq-status">'
+    + '<option value="Needs Follow-up" selected>Needs Follow-up</option>'
+    + '<option value="Interested">Interested</option>'
+    + '<option value="Not Interested">Not Interested</option>'
+    + '<option value="Order Placed">Order Placed</option>'
+    + '</select>'
+
+    + '<label class="fl">Remarks</label>'
+    + '<textarea class="fi" id="inq-remarks" rows="3" placeholder="What did the customer ask for..." style="resize:vertical;font-family:var(--f-body)"></textarea>'
+
+    + '<label class="fl">Next Follow-up Date</label>'
+    + '<input class="fi" id="inq-followup-date" type="date">'
+
+    + '<button onclick="submitInquiry()" style="width:100%;margin-top:0.5rem;background:#8B6F1F;color:var(--cream);border:none;padding:0.9rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:background 0.2s" onmouseover="this.style.background=\'var(--gold)\'" onmouseout="this.style.background=\'#8B6F1F\'">Save Inquiry</button>'
+    + '<div id="inquiry-error" style="display:none;color:#C0392B;font-family:var(--f-ui);font-size:0.7rem;margin-top:0.6rem"></div>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+}
+
+function submitInquiry() {
+  var name = document.getElementById('inq-name').value.trim();
+  var phone = document.getElementById('inq-phone').value.trim();
+  var channel = document.getElementById('inq-channel').value;
+  var product = document.getElementById('inq-product').value.trim();
+  var value = document.getElementById('inq-value').value;
+  var status = document.getElementById('inq-status').value;
+  var remarks = document.getElementById('inq-remarks').value.trim();
+  var followupDate = document.getElementById('inq-followup-date').value;
+  var errEl = document.getElementById('inquiry-error');
+
+  if (!name) { errEl.textContent = 'Please enter the customer/prospect name.'; errEl.style.display = 'block'; return; }
+
+  var payload = {
+    action: 'save_visit',
+    emp_id: EMP_PROFILE ? EMP_PROFILE.emp_id : '',
+    emp_name: EMP_PROFILE ? EMP_PROFILE.name : '',
+    gstin: '',
+    shop: name,
+    status: status,
+    remarks: remarks,
+    next_followup_date: followupDate,
+    entry_type: 'inquiry',
+    phone: phone,
+    product_interest: product,
+    source_channel: channel,
+    inquiry_value: value,
+    _t: BACKEND_TOKEN
+  };
+
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok) {
+      document.getElementById('inquiry-modal').remove();
+      loadVisits();
+      if (EMP_PROFILE) refreshVisitSummary(EMP_PROFILE);
+    } else {
+      errEl.textContent = data.error || 'Could not save inquiry.';
       errEl.style.display = 'block';
     }
   }).catch(function(){
