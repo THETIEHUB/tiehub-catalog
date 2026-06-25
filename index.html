@@ -3887,6 +3887,7 @@ function submitAddCustomer() {
 // ===== VISITS & FOLLOW-UPS =====
 var VISITS_CACHE = [];
 var _visitFilter = 'all';
+var _openFollowupEdit = null; // visit_id currently showing its inline date editor
 
 function loadVisits() {
   var el = document.getElementById('emp-visits-list');
@@ -3928,75 +3929,77 @@ function renderVisits() {
     visits = visits.filter(function(v){ return v.status === _visitFilter; });
   }
   if (!visits.length) {
-    document.getElementById('emp-visits-list').innerHTML = '<div class="emp-loading">No visits logged yet.</div>';
+    document.getElementById('emp-visits-list').innerHTML = '<div class="emp-loading">No entries for this filter.</div>';
     return;
   }
   var todayStr = new Date().toISOString().split('T')[0];
   var VISIT_STATUSES = ['Interested', 'Not Interested', 'Order Placed', 'Needs Follow-up'];
 
-  document.getElementById('emp-visits-list').innerHTML = visits.map(function(v){
+  var rows = visits.map(function(v){
     var dateStr = v.ts ? v.ts.split(' ')[0] : '—';
     var stClass = visitStatusClass(v.status);
-    var followBadge = '';
-    if (v.next_followup_date) {
+    var isInquiry = v.entry_type === 'inquiry';
+    var inqBadge = isInquiry ? '<span style="background:#8B6F1F;color:#fff;font-family:var(--f-ui);font-size:0.52rem;letter-spacing:0.08em;text-transform:uppercase;padding:2px 6px;margin-left:6px;border-radius:2px;white-space:nowrap">New Inquiry</span>' : '';
+
+    var detailsBits = [];
+    if (isInquiry) {
+      if (v.phone) detailsBits.push(v.phone);
+      if (v.source_channel) detailsBits.push(v.source_channel);
+      if (v.product_interest) detailsBits.push(v.product_interest);
+    } else {
+      if (v.gstin) detailsBits.push(v.gstin);
+    }
+    var details = detailsBits.join(' · ') || '—';
+
+    var amtCell = v.order_amount
+      ? '₹' + Number(v.order_amount).toLocaleString('en-IN')
+      : (v.inquiry_value ? '₹' + Number(v.inquiry_value).toLocaleString('en-IN') + ' <span style="color:var(--muted)">(est.)</span>' : '—');
+
+    // Follow-up date cell — collapsed by default, opens a date picker only on click
+    var fuCell;
+    if (_openFollowupEdit === v.visit_id) {
+      fuCell = '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">'
+        + '<input type="date" id="fu-date-' + v.visit_id + '" value="' + (v.next_followup_date||'') + '" style="font-family:var(--f-ui);font-size:0.72rem;padding:3px 5px;border:1px solid var(--border2)">'
+        + '<button class="oc-btn" onclick="updateFollowupClick(\'' + v.visit_id + '\')">Save</button>'
+        + '<button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')">✕</button>'
+        + '</div>';
+    } else if (v.next_followup_date) {
       var overdue = v.next_followup_date < todayStr;
       var dueToday = v.next_followup_date === todayStr;
-      var color = overdue ? '#C0392B' : dueToday ? '#856404' : 'var(--muted)';
-      var label = overdue ? 'Overdue — ' : dueToday ? 'Due today — ' : 'Next follow-up: ';
-      followBadge = '<div style="margin-top:5px;font-family:var(--f-ui);font-size:0.62rem;color:' + color + ';font-weight:' + (overdue||dueToday ? '600':'400') + '">' + label + v.next_followup_date + '</div>';
+      var color = overdue ? '#C0392B' : dueToday ? '#856404' : 'var(--ink)';
+      var label = overdue ? 'Overdue: ' : dueToday ? 'Today: ' : '';
+      fuCell = '<span style="color:' + color + ';font-weight:' + (overdue||dueToday?'600':'400') + '">' + label + v.next_followup_date + '</span>'
+        + ' <button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')" title="Change date">✎</button>';
+    } else {
+      fuCell = '<span style="color:var(--muted)">Not set</span> <button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')">+ Set</button>';
     }
 
-    // One-click action buttons — only show statuses OTHER than the current one.
-    // "Order Placed" is special-cased to also capture the final order amount.
-    var actionButtons = VISIT_STATUSES.filter(function(s){ return s !== v.status; }).map(function(s){
-      if (s === 'Order Placed') {
-        return '<button class="oc-btn" onclick="markOrderPlaced(\'' + v.visit_id + '\')">' + s + '</button>';
-      }
+    var statusButtons = VISIT_STATUSES.filter(function(s){ return s !== v.status; }).map(function(s){
+      if (s === 'Order Placed') return '<button class="oc-btn" onclick="markOrderPlaced(\'' + v.visit_id + '\')">' + s + '</button>';
       return '<button class="oc-btn" onclick="updateVisitStatusClick(\'' + v.visit_id + '\',\'' + s + '\')">' + s + '</button>';
     }).join('');
 
-    var isInquiry = v.entry_type === 'inquiry';
-    var inqBadge = isInquiry ? '<span style="background:#8B6F1F;color:#fff;font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.1em;text-transform:uppercase;padding:2px 7px;margin-left:8px;border-radius:2px;vertical-align:middle">New Inquiry</span>' : '';
-
-    var metaLine;
-    if (isInquiry) {
-      var bits = [];
-      if (v.phone) bits.push(v.phone);
-      if (v.source_channel) bits.push(v.source_channel);
-      if (v.product_interest) bits.push(v.product_interest);
-      if (v.inquiry_value) bits.push('₹' + Number(v.inquiry_value).toLocaleString('en-IN'));
-      metaLine = dateStr + (bits.length ? ' &nbsp;·&nbsp; ' + bits.join(' &nbsp;·&nbsp; ') : '') + ' &nbsp;·&nbsp; by ' + (v.emp_name||'');
-    } else {
-      metaLine = dateStr + ' &nbsp;·&nbsp; ' + (v.gstin||'') + ' &nbsp;·&nbsp; by ' + (v.emp_name||'');
-    }
-
-    var orderAmtLine = v.order_amount ? '<div style="margin-top:4px;font-family:var(--f-ui);font-size:0.72rem;color:#00703C;font-weight:600">✓ Order Amount: ₹' + Number(v.order_amount).toLocaleString('en-IN') + '</div>' : '';
-
-    // Inline follow-up date editor — always available, lets you push the date
-    // forward without creating a whole new entry.
-    var fuEditor = '<div style="margin-top:7px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-      + '<input type="date" id="fu-date-' + v.visit_id + '" value="' + (v.next_followup_date||'') + '" style="font-family:var(--f-ui);font-size:0.7rem;padding:4px 6px;border:1px solid var(--border2);background:#fff">'
-      + '<button class="oc-btn" onclick="updateFollowupClick(\'' + v.visit_id + '\')">Update Follow-up Date</button>'
-      + '</div>';
-
-    return '<div class="order-card" id="visit-' + v.visit_id + '">'
-      + '<div>'
-      + '<div class="oc-po">' + (v.shop || v.gstin || 'Customer') + inqBadge + '</div>'
-      + '<div class="oc-meta">' + metaLine + '</div>'
-      + '<div style="font-family:var(--f-body);font-size:0.82rem;color:var(--ink);margin-top:6px;line-height:1.4">' + (v.remarks || '<em style="color:var(--muted)">No remarks</em>') + '</div>'
-      + orderAmtLine
-      + followBadge
-      + fuEditor
-      + '<div class="oc-actions">' + actionButtons + '</div>'
-      + '</div>'
-      + '<div style="text-align:right">'
-      + '<span class="oc-status ' + stClass + '">' + (v.status||'—') + '</span>'
-      + '<div class="oc-actions" style="margin-top:8px;justify-content:flex-end">'
-      + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕ Delete</button>'
-      + '</div>'
-      + '</div>'
-      + '</div>';
+    return '<tr>'
+      + '<td>' + (v.shop || v.gstin || 'Customer') + inqBadge + '<div style="font-size:0.68rem;color:var(--muted);margin-top:2px">' + dateStr + ' · by ' + (v.emp_name||'') + '</div></td>'
+      + '<td>' + details + '</td>'
+      + '<td style="max-width:220px">' + (v.remarks ? v.remarks : '<em style="color:var(--muted)">—</em>') + '</td>'
+      + '<td class="num">' + amtCell + '</td>'
+      + '<td><span class="oc-status ' + stClass + '">' + (v.status||'—') + '</span></td>'
+      + '<td style="white-space:nowrap">' + fuCell + '</td>'
+      + '<td><div class="oc-actions" style="justify-content:flex-start">' + statusButtons + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button></div></td>'
+      + '</tr>';
   }).join('');
+
+  document.getElementById('emp-visits-list').innerHTML =
+    '<div style="overflow-x:auto"><table class="po-tbl"><thead><tr>'
+    + '<th>Customer</th><th>Details</th><th>Remarks</th><th class="num">Amount</th>'
+    + '<th>Status</th><th>Next Follow-up</th><th>Actions</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function toggleFollowupEdit(visitId) {
+  _openFollowupEdit = (_openFollowupEdit === visitId) ? null : visitId;
+  renderVisits();
 }
 
 function markOrderPlaced(visitId) {
@@ -4034,6 +4037,7 @@ function updateFollowupClick(visitId) {
     if (data.ok) {
       var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
       if (v) v.next_followup_date = dateVal;
+      _openFollowupEdit = null;
       renderVisits();
       if (EMP_PROFILE) refreshVisitSummary(EMP_PROFILE);
     } else {
