@@ -4106,6 +4106,15 @@ function clearVisitFilters() {
   renderVisits();
 }
 
+function callLink_(phone) {
+  var digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) digits = '91' + digits; // assume Indian number if no country code given
+  return '<a href="tel:+' + digits + '" '
+    + 'style="color:#2E5BFF;text-decoration:none;font-size:0.95rem;vertical-align:middle" '
+    + 'title="Call" onclick="event.stopPropagation()">📞</a>';
+}
+
 function waChatLink_(phone) {
   var digits = String(phone || '').replace(/\D/g, '');
   if (!digits) return '';
@@ -4170,7 +4179,7 @@ function renderVisits() {
     var detailsBits = [];
     if (isInquiry) {
       if (v.source_channel) detailsBits.push(v.source_channel);
-      if (v.phone) detailsBits.push(v.phone + ' ' + waChatLink_(v.phone));
+      if (v.phone) detailsBits.push(v.phone + ' ' + callLink_(v.phone) + ' ' + waChatLink_(v.phone));
       if (v.email) detailsBits.push(v.email);
     } else {
       if (v.gstin) detailsBits.push(v.gstin);
