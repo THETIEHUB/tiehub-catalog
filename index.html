@@ -1791,6 +1791,10 @@ function getPriceRange(p) {
 function getFiltered() {
   const cats = getCatsForNav(activeCat);
   let list = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
+  // Never show a product that has no photo at all — these used to appear
+  // with a placeholder icon, but a wholesale buyer can't order what they
+  // can't see, so they're hidden from browsing entirely.
+  list = list.filter(p => p.img);
   if (searchQ) {
     const q = searchQ.toLowerCase().replace(/[-_\s]/g, ''); // strip dashes/spaces for flexible match
     list = list.filter(p => {
@@ -3947,6 +3951,12 @@ function extractGstCertificate() {
       if (data.gstin)  { document.getElementById('ac-gst').value  = data.gstin; filled.push('GSTIN'); }
       if (data.name)   { document.getElementById('ac-shop').value = data.name;  filled.push('Company Name'); }
       if (data.address){ document.getElementById('ac-addr').value = data.address; filled.push('Address'); }
+      if (data.city)   { document.getElementById('ac-city').value = data.city; filled.push('City'); }
+      if (data.state) {
+        var stateSel = document.getElementById('ac-state');
+        var matched = Array.from(stateSel.options).some(function(o){ return o.value.toLowerCase() === data.state.toLowerCase(); });
+        if (matched) { stateSel.value = data.state; filled.push('State'); }
+      }
       statusEl.style.color = filled.length ? '#00703C' : '#856404';
       statusEl.textContent = filled.length
         ? 'Auto-filled: ' + filled.join(', ') + '. Please double-check these before saving — OCR can misread characters.'
