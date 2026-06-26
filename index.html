@@ -1854,9 +1854,41 @@ function getFiltered() {
 
 // Populate filter sidebar with counts for current category
 function buildFilterSidebar() {
-  // Get products in the current category (ignoring other filters)
+  // Get products in the current view — category AND whatever search/stock/
+  // price refinement is already active — so the attribute filter options
+  // (and their counts) reflect what's actually on screen right now, the way
+  // a normal e-commerce site's filters do. (We deliberately don't fold in
+  // the OTHER attribute checkboxes here — color/material/pattern/size/style
+  // — since those are exactly what we're computing the option lists for.)
   const cats = getCatsForNav(activeCat);
-  const inCat = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
+  let inCat = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
+  inCat = inCat.filter(p => p.img);
+
+  if (searchQ) {
+    const q = searchQ.toLowerCase().replace(/[-_\s]/g, '');
+    inCat = inCat.filter(p => {
+      const skuClean = p.sku.toLowerCase().replace(/[-_\s]/g, '');
+      const catClean = p.cat.toLowerCase();
+      return skuClean.includes(q) || p.sku.toLowerCase().includes(searchQ.toLowerCase()) || catClean.includes(q);
+    });
+  }
+
+  const sfSidebar = document.getElementById('stock-sel')?.value || 'all';
+  if (sfSidebar === 'in') {
+    inCat = inCat.filter(p => totalAvail(p) > 0);
+  } else if (sfSidebar !== 'all') {
+    const minQtySidebar = parseInt(sfSidebar, 10);
+    if (!isNaN(minQtySidebar)) inCat = inCat.filter(p => totalAvail(p) >= minQtySidebar);
+  }
+
+  const prMinElSidebar = document.getElementById('price-thumb-min');
+  const prMaxElSidebar = document.getElementById('price-thumb-max');
+  const prMinSidebar = parseInt(prMinElSidebar?.value || 0, 10);
+  const prMaxSidebar = parseInt(prMaxElSidebar?.value || 99999, 10);
+  const prSliderMaxSidebar = parseInt(prMaxElSidebar?.max || 99999, 10);
+  if (prMinSidebar > 0 || prMaxSidebar < prSliderMaxSidebar) {
+    inCat = inCat.filter(p => p.mrp >= prMinSidebar && p.mrp <= prMaxSidebar);
+  }
 
   // Count materials
   const matCounts = {};
@@ -1874,16 +1906,24 @@ function buildFilterSidebar() {
     if (p.color) colorCounts[p.color] = (colorCounts[p.color] || 0) + 1;
   });
 
+  // Remember which options were checked before re-render, for every group —
+  // rebuilding the option lists (e.g. because search/stock/price changed)
+  // must never silently uncheck a filter the person already applied.
+  var checkedMats     = Array.from(document.querySelectorAll('input[name="f-material"]:checked')).map(i=>i.value);
+  var checkedStyles   = Array.from(document.querySelectorAll('input[name="f-style"]:checked')).map(i=>i.value);
+  var checkedPatterns = Array.from(document.querySelectorAll('input[name="f-pattern"]:checked')).map(i=>i.value);
+  var checkedSizes    = Array.from(document.querySelectorAll('input[name="f-size"]:checked')).map(i=>i.value);
+
   // Render material checkboxes
   document.getElementById('filter-materials').innerHTML =
     Object.entries(matCounts).sort((a,b)=>b[1]-a[1])
-      .map(([m,c]) => `<label class="fopt"><input type="checkbox" name="f-material" value="${m}" onchange="renderProducts()"> ${m}<span class="fopt-count">${c}</span></label>`)
+      .map(([m,c]) => `<label class="fopt"><input type="checkbox" name="f-material" value="${m}" ${checkedMats.indexOf(m)!==-1?'checked':''} onchange="renderProducts()"> ${m}<span class="fopt-count">${c}</span></label>`)
       .join('');
 
   // Render style checkboxes
   document.getElementById('filter-styles').innerHTML =
     Object.entries(styleCounts).sort((a,b)=>b[1]-a[1])
-      .map(([s,c]) => `<label class="fopt"><input type="checkbox" name="f-style" value="${s}" onchange="renderProducts()"> ${s}<span class="fopt-count">${c}</span></label>`)
+      .map(([s,c]) => `<label class="fopt"><input type="checkbox" name="f-style" value="${s}" ${checkedStyles.indexOf(s)!==-1?'checked':''} onchange="renderProducts()"> ${s}<span class="fopt-count">${c}</span></label>`)
       .join('');
 
   // Show Pattern filter ONLY if sheet has pattern data
@@ -1892,7 +1932,7 @@ function buildFilterSidebar() {
     patternGroup.style.display = 'block';
     document.getElementById('filter-patterns').innerHTML =
       Object.entries(patternCounts).sort((a,b)=>b[1]-a[1])
-        .map(([p,c]) => `<label class="fopt"><input type="checkbox" name="f-pattern" value="${p}" onchange="renderProducts()"> ${p}<span class="fopt-count">${c}</span></label>`)
+        .map(([p,c]) => `<label class="fopt"><input type="checkbox" name="f-pattern" value="${p}" ${checkedPatterns.indexOf(p)!==-1?'checked':''} onchange="renderProducts()"> ${p}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
     patternGroup.style.display = 'none';
@@ -1904,7 +1944,7 @@ function buildFilterSidebar() {
     sizeGroup.style.display = 'block';
     document.getElementById('filter-sizes').innerHTML =
       Object.entries(sizeCounts).sort((a,b)=>b[1]-a[1])
-        .map(([sz,c]) => `<label class="fopt"><input type="checkbox" name="f-size" value="${sz}" onchange="renderProducts()"> ${sz}<span class="fopt-count">${c}</span></label>`)
+        .map(([sz,c]) => `<label class="fopt"><input type="checkbox" name="f-size" value="${sz}" ${checkedSizes.indexOf(sz)!==-1?'checked':''} onchange="renderProducts()"> ${sz}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
     sizeGroup.style.display = 'none';
@@ -2217,7 +2257,7 @@ function onSearch() {
   }
 
   if (searchQ && document.getElementById('page-home').style.display !== 'none') showCatalog('ALL');
-  else renderProducts();
+  else { buildFilterSidebar(); renderProducts(); }
 
   // If exactly 1 result → auto-jump and highlight
   if (searchQ.length >= 3) {
