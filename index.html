@@ -997,13 +997,16 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <button class="oc-btn" onclick="clearVisitFilters()">✕ Clear</button>
       </div>
 
-      <div style="display:flex;gap:0.7rem;margin-bottom:1rem;flex-wrap:wrap">
+      <div style="display:flex;gap:0.7rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
         <button class="emp-filter-btn active" onclick="filterVisits('all',this)">All</button>
         <button class="emp-filter-btn" style="background:#FFF3CD;color:#856404;border-color:#FFE69C" onclick="filterVisits('PRIORITY',this)">🔥 Priority</button>
         <button class="emp-filter-btn" onclick="filterVisits('Interested',this)">Interested</button>
         <button class="emp-filter-btn" onclick="filterVisits('Not Interested',this)">Not Interested</button>
         <button class="emp-filter-btn" onclick="filterVisits('Order Placed',this)">Order Placed</button>
         <button class="emp-filter-btn" onclick="filterVisits('Needs Follow-up',this)">Needs Follow-up</button>
+        <label style="display:flex;align-items:center;gap:5px;margin-left:0.8rem;font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);cursor:pointer">
+          <input type="checkbox" id="visit-show-closed" onchange="renderVisits()"> Show Closed/Cancelled
+        </label>
       </div>
 
       <div id="emp-visits-list">
@@ -4333,6 +4336,7 @@ function clearVisitFilters() {
   document.getElementById('visit-search-name').value = '';
   document.getElementById('visit-date-from').value = '';
   document.getElementById('visit-date-to').value = '';
+  document.getElementById('visit-show-closed').checked = false;
   _visitFilter = 'all';
   document.querySelectorAll('#emp-visits-tab .emp-filter-btn').forEach(function(b){ b.classList.remove('active'); });
   document.querySelector('#emp-visits-tab .emp-filter-btn').classList.add('active');
@@ -4368,18 +4372,29 @@ function visitStatusClass(status) {
   if (key === 'contacted') return 'vs-interested';
   if (key === 'followuprequired') return 'vs-needsfollowup';
   if (key === 'orderconfirmed') return 'vs-orderplaced';
+  if (key === 'paymentpending') return 'vs-needsfollowup';
   if (key === 'closed') return 'vs-orderplaced';
   if (key === 'cancelled') return 'vs-notinterested';
   return 'vs-needsfollowup';
 }
 
 function renderVisits() {
+  var TERMINAL_STATUSES = ['Not Interested', 'Order Placed', 'Cancelled', 'Closed'];
   var visits = VISITS_CACHE.slice();
+
+  // Closed/Cancelled entries are hidden from every view by default — this
+  // list is meant to be your active work queue, not a permanent history.
+  // Checking "Show Closed/Cancelled" brings them back if you need to audit.
+  var showClosed = document.getElementById('visit-show-closed') ? document.getElementById('visit-show-closed').checked : false;
+  if (!showClosed) {
+    visits = visits.filter(function(v){ return TERMINAL_STATUSES.indexOf(v.status) === -1; });
+  }
+
   if (_visitFilter === 'PRIORITY') {
     // Today's priority queue: anything brand new, anything needing
     // follow-up, or anything that's blown the 2-hour first-contact SLA.
     visits = visits.filter(function(v){
-      if (v.status === 'New Enquiry' || v.status === 'Follow-up Required' || v.status === 'Needs Follow-up') return true;
+      if (v.status === 'New Enquiry' || v.status === 'Follow-up Required' || v.status === 'Needs Follow-up' || v.status === 'Payment Pending') return true;
       if (v.entry_type === 'inquiry' && v.status === 'New Enquiry' && v.ts && (Date.now() - new Date(v.ts.replace(' ', 'T'))) > 2 * 60 * 60 * 1000) return true;
       return false;
     });
@@ -4410,8 +4425,6 @@ function renderVisits() {
   }
   var todayStr = new Date().toISOString().split('T')[0];
   var VISIT_STATUSES = ['Interested', 'Not Interested', 'Order Placed', 'Needs Follow-up'];
-  var INQUIRY_STATUSES = ['New Enquiry', 'Contacted', 'Interested', 'Follow-up Required', 'Order Confirmed', 'Cancelled'];
-  var TERMINAL_STATUSES = ['Not Interested', 'Order Placed', 'Cancelled', 'Closed'];
   var isManager = EMP_PROFILE && EMP_PROFILE.role === 'manager';
 
   var rows = visits.map(function(v){
@@ -4468,30 +4481,42 @@ function renderVisits() {
 
     // Once a row reaches a terminal status, status buttons disappear for good —
     // only a manager can reopen it (mistakes happen, but reopening is deliberate).
+    // (Terminal rows are normally filtered out entirely — this branch only
+    // matters when "Show Closed/Cancelled" is checked.)
     var isLocked = TERMINAL_STATUSES.indexOf(v.status) !== -1;
     var actionsHTML;
     if (isLocked) {
       actionsHTML = '<span style="font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)">Closed</span>'
         + (isManager ? ' <button class="oc-btn" onclick="reopenVisit(\'' + v.visit_id + '\')">↺ Reopen</button>' : '')
         + ' <button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
+    } else if (isInquiry) {
+      // Strict step-by-step flow (FMS-style) — show only the ONE next step
+      // forward, plus Cancelled as the always-available side exit. No
+      // jumping ahead or skipping stages.
+      var flow = ['New Enquiry', 'Contacted', 'Interested', 'Follow-up Required', 'Order Confirmed'];
+      var flowIdx = flow.indexOf(v.status);
+      var nextBtn = '';
+      if (v.status === 'Order Confirmed') {
+        nextBtn = '<button class="oc-btn" style="background:#8B6F1F;color:#fff" onclick="openClosureForm(\'' + v.visit_id + '\')">✓ Complete Closure</button>';
+      } else if (v.status === 'Payment Pending') {
+        nextBtn = '<button class="oc-btn" style="background:#0F5132;color:#fff" onclick="markPaymentReceived(\'' + v.visit_id + '\')">✓ Payment Received</button>';
+      } else if (flowIdx !== -1 && flowIdx < flow.length - 1) {
+        var nextStatus = flow[flowIdx + 1];
+        if (nextStatus === 'Interested') nextBtn = '<button class="oc-btn" onclick="markInterested(\'' + v.visit_id + '\')">→ Interested</button>';
+        else if (nextStatus === 'Follow-up Required') nextBtn = '<button class="oc-btn" onclick="markNeedsFollowup(\'' + v.visit_id + '\',\'Follow-up Required\')">→ Follow-up Required</button>';
+        else nextBtn = '<button class="oc-btn" onclick="updateVisitStatusClick(\'' + v.visit_id + '\',\'' + nextStatus + '\')">→ ' + nextStatus + '</button>';
+      }
+      var cancelBtn = '<button class="oc-btn" style="opacity:0.7" onclick="markInquiryCancelled(\'' + v.visit_id + '\')">Cancelled</button>';
+      actionsHTML = nextBtn + cancelBtn + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
     } else {
-      var statusList = isInquiry ? INQUIRY_STATUSES : VISIT_STATUSES;
-      var statusButtons = statusList.filter(function(s){ return s !== v.status; }).map(function(s){
+      var statusButtons = VISIT_STATUSES.filter(function(s){ return s !== v.status; }).map(function(s){
         if (s === 'Order Placed') return '<button class="oc-btn" onclick="markOrderPlaced(\'' + v.visit_id + '\')">Order Placed</button>';
-        if (s === 'Cancelled') return '<button class="oc-btn" onclick="markInquiryCancelled(\'' + v.visit_id + '\')">Cancelled</button>';
         if (s === 'Interested') return '<button class="oc-btn" onclick="markInterested(\'' + v.visit_id + '\')">Interested</button>';
         if (s === 'Not Interested') return '<button class="oc-btn" onclick="markNotInterested(\'' + v.visit_id + '\')">Not Interested</button>';
         if (s === 'Needs Follow-up') return '<button class="oc-btn" onclick="markNeedsFollowup(\'' + v.visit_id + '\',\'Needs Follow-up\')">Needs Follow-up</button>';
-        if (s === 'Follow-up Required') return '<button class="oc-btn" onclick="markNeedsFollowup(\'' + v.visit_id + '\',\'Follow-up Required\')">Follow-up Required</button>';
         return '<button class="oc-btn" onclick="updateVisitStatusClick(\'' + v.visit_id + '\',\'' + s + '\')">' + s + '</button>';
       }).join('');
-      // Once the customer has agreed and status is "Order Confirmed", the only
-      // way forward is the full closure form — capturing SKU/payment/dispatch
-      // before the row can actually be marked Closed.
-      var closureBtn = (isInquiry && v.status === 'Order Confirmed')
-        ? '<button class="oc-btn" style="background:#8B6F1F;color:#fff" onclick="openClosureForm(\'' + v.visit_id + '\')">✓ Complete Closure</button>'
-        : '';
-      actionsHTML = closureBtn + statusButtons + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
+      actionsHTML = statusButtons + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
     }
 
     return '<tr>'
@@ -4579,13 +4604,19 @@ function openClosureForm(visitId) {
     + '<label class="fl">Payment Reference ID</label>'
     + '<input class="fi" id="cls-payment-ref" type="text" placeholder="Transaction / UTR number">'
 
+    + '<label class="fl">Has Payment Been Received?</label>'
+    + '<select class="fi" id="cls-payment-received">'
+    + '<option value="yes">Yes — close this inquiry now</option>'
+    + '<option value="no">No — keep it open until payment comes in</option>'
+    + '</select>'
+
     + '<label class="fl">Dispatch Status</label>'
     + '<select class="fi" id="cls-dispatch">'
     + '<option value="Ready">Ready</option>'
     + '<option value="Dispatched">Dispatched</option>'
     + '</select>'
 
-    + '<button id="cls-save-btn" onclick="submitClosureForm(\'' + visitId + '\')" style="width:100%;margin-top:1rem;background:#8B6F1F;color:var(--cream);border:none;padding:0.9rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;cursor:pointer;font-weight:500" onmouseover="this.style.background=\'var(--gold)\'" onmouseout="this.style.background=\'#8B6F1F\'">Mark Closed</button>'
+    + '<button id="cls-save-btn" onclick="submitClosureForm(\'' + visitId + '\')" style="width:100%;margin-top:1rem;background:#8B6F1F;color:var(--cream);border:none;padding:0.9rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;cursor:pointer;font-weight:500" onmouseover="this.style.background=\'var(--gold)\'" onmouseout="this.style.background=\'#8B6F1F\'">Save</button>'
     + '<div id="closure-error" style="display:none;color:#C0392B;font-family:var(--f-ui);font-size:0.7rem;margin-top:0.6rem"></div>'
     + '</div></div>';
   document.body.appendChild(modal);
@@ -4597,6 +4628,7 @@ function submitClosureForm(visitId) {
   var amount = document.getElementById('cls-amount').value;
   var paymentMode = document.getElementById('cls-payment-mode').value;
   var paymentRef = document.getElementById('cls-payment-ref').value.trim();
+  var paymentReceived = document.getElementById('cls-payment-received').value === 'yes';
   var dispatchStatus = document.getElementById('cls-dispatch').value;
   var errEl = document.getElementById('closure-error');
 
@@ -4610,24 +4642,32 @@ function submitClosureForm(visitId) {
   if (btn.disabled) return;
   btn.disabled = true; btn.textContent = 'Saving...'; btn.style.opacity = '0.6';
 
+  // If payment hasn't actually come in yet, this stays open as "Payment
+  // Pending" instead of Closed — the details are saved either way, so
+  // nothing needs to be re-entered once payment does arrive.
+  var newStatus = paymentReceived ? 'Closed' : 'Payment Pending';
   var todayStr = new Date().toISOString().split('T')[0];
+  var payload = {
+    action: 'update_visit_status', visit_id: visitId, status: newStatus,
+    order_amount: amount,
+    closure_sku: sku, closure_qty: qty,
+    payment_mode: paymentMode, payment_reference: paymentRef, dispatch_status: dispatchStatus,
+    _t: BACKEND_TOKEN
+  };
+  if (paymentReceived) payload.closing_date = todayStr;
+
   fetch(BACKEND_URL, {
     method: 'POST',
     headers: {'Content-Type': 'text/plain;charset=utf-8'},
-    body: JSON.stringify({
-      action: 'update_visit_status', visit_id: visitId, status: 'Closed',
-      order_amount: amount, closing_date: todayStr,
-      closure_sku: sku, closure_qty: qty,
-      payment_mode: paymentMode, payment_reference: paymentRef, dispatch_status: dispatchStatus,
-      _t: BACKEND_TOKEN
-    })
+    body: JSON.stringify(payload)
   }).then(function(r){ return r.json(); }).then(function(data){
     if (data.ok) {
       var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
       if (v) {
-        v.status = 'Closed'; v.order_amount = amount; v.closing_date = todayStr;
+        v.status = newStatus; v.order_amount = amount;
         v.closure_sku = sku; v.closure_qty = qty; v.payment_mode = paymentMode;
         v.payment_reference = paymentRef; v.dispatch_status = dispatchStatus;
+        if (paymentReceived) v.closing_date = todayStr;
       }
       document.getElementById('closure-modal').remove();
       renderVisits();
@@ -4635,12 +4675,12 @@ function submitClosureForm(visitId) {
     } else {
       errEl.textContent = data.error || 'Could not save closure details.';
       errEl.style.display = 'block';
-      btn.disabled = false; btn.textContent = 'Mark Closed'; btn.style.opacity = '1';
+      btn.disabled = false; btn.textContent = 'Save'; btn.style.opacity = '1';
     }
   }).catch(function(){
     errEl.textContent = 'Connection error. Please try again.';
     errEl.style.display = 'block';
-    btn.disabled = false; btn.textContent = 'Mark Closed'; btn.style.opacity = '1';
+    btn.disabled = false; btn.textContent = 'Save'; btn.style.opacity = '1';
   });
 }
 
@@ -4711,6 +4751,16 @@ function markNeedsFollowup(visitId, statusLabel) {
   var combined = appendRemark_(v ? v.remarks : '', statusLabel, reason);
   postStatusUpdate_(visitId, { status: statusLabel, remarks: combined, next_followup_date: dateStr }, function(){
     if (v) { v.status = statusLabel; v.remarks = combined; if (dateStr) v.next_followup_date = dateStr; }
+  });
+}
+
+// Finalizes a "Payment Pending" row to Closed once payment actually arrives —
+// no need to re-enter SKU/Qty/etc., those were already saved at closure time.
+function markPaymentReceived(visitId) {
+  var todayStr = new Date().toISOString().split('T')[0];
+  postStatusUpdate_(visitId, { status: 'Closed', closing_date: todayStr }, function(){
+    var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+    if (v) { v.status = 'Closed'; v.closing_date = todayStr; }
   });
 }
 
