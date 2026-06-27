@@ -1494,6 +1494,31 @@ const MATERIAL_RULES = [
   [['polo','tshirt','t-shirt','t shirt','cap','sock','cotton'], 'Cotton'],
   [['bag','packing','mask'], 'Synthetic'],
 ];
+
+// Which materials actually make sense for each category type above. Used to
+// hide implausible options (e.g. "Brass" showing up while browsing Neckties)
+// from the filter sidebar — even if a data-entry mistake puts it in a row,
+// it simply won't render as a checkbox for a category it doesn't belong to.
+// Categories that don't match any MATERIAL_RULES group (bucket "Other") are
+// left unrestricted, since we haven't classified them one way or the other.
+const MATERIAL_GROUP_WHITELIST = {
+  'Metal':      ['Metal', 'Brass', 'Steel', 'Other'],
+  'Silk':       ['Silk', 'Microfiber', 'Polyester', 'Polyester 70%, Elastane 30%', 'Cotton', 'Wool',
+                  'Cashmere', 'Pashmina', 'Linen', 'Synthetic', 'Knitted', 'Woolen', 'Felt',
+                  'Cotton mix', 'Elasticated', 'Sequins', 'Other'],
+  'PU':         ['PU', 'Leather', 'Suede', 'Synthetic', 'Cotton', 'Other'],
+  'Cotton':     ['Cotton', 'Cotton mix', 'Polyester', 'Microfiber', 'Synthetic', 'Elasticated',
+                  'Knitted', 'Wool', 'Woolen', 'Other'],
+  'Synthetic':  ['Synthetic', 'Cotton', 'Polyester', 'PU', 'Leather', 'Other']
+};
+
+function isPlausibleMaterial(cat, material) {
+  var group = matchRule(cat, MATERIAL_RULES);
+  var whitelist = MATERIAL_GROUP_WHITELIST[group];
+  if (!whitelist) return true; // unclassified category — don't restrict
+  return whitelist.indexOf(material) !== -1;
+}
+
 const STYLE_RULES = [
   [['cufflink','lapel','tie pin','tiepin','button','brooch','pocket watch','tuxedo','pen stand','cuff','pocket square','necktie','tie'], 'Formal'],
   [['bow','cravat','boutonniere','ascot'], 'Wedding'],
@@ -1825,7 +1850,7 @@ function getFiltered() {
 
   // Material filter (checkboxes — multi-select)
   const matChecked = Array.from(document.querySelectorAll('input[name="f-material"]:checked')).map(i=>i.value);
-  if (matChecked.length) list = list.filter(p => matChecked.includes(getMaterial(p)));
+  if (matChecked.length) list = list.filter(p => matChecked.includes(getMaterial(p)) && isPlausibleMaterial(p.cat, getMaterial(p)));
 
   // Style filter
   const styleChecked = Array.from(document.querySelectorAll('input[name="f-style"]:checked')).map(i=>i.value);
@@ -1898,7 +1923,12 @@ function buildFilterSidebar() {
   const colorCounts = {};
   inCat.forEach(p => {
     const m = getMaterial(p);
-    matCounts[m] = (matCounts[m] || 0) + 1;
+    // Skip counting a material that doesn't make sense for this product's
+    // own category (e.g. "Brass" on a necktie row) — this hides it from the
+    // filter sidebar entirely, regardless of why the data says that.
+    if (isPlausibleMaterial(p.cat, m)) {
+      matCounts[m] = (matCounts[m] || 0) + 1;
+    }
     const s = getStyle(p);
     styleCounts[s] = (styleCounts[s] || 0) + 1;
     if (p.pattern) patternCounts[p.pattern] = (patternCounts[p.pattern] || 0) + 1;
