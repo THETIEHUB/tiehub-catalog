@@ -473,6 +473,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .pb-l{color:var(--muted2);font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.2em;text-transform:uppercase;font-weight:400}
 .pb-v{color:var(--ink);margin-bottom:0.6rem;font-weight:500;font-size:1rem;font-family:var(--f-body)}
 .po-tbl{width:100%;border-collapse:collapse;font-size:0.92rem;font-family:var(--f-body)}
+#emp-visits-list table tbody tr:nth-child(odd){background:var(--white)}
+#emp-visits-list table tbody tr:nth-child(even){background:var(--cream2)}
 .po-tbl th{text-align:left;padding:0.6rem 0.4rem;font-family:var(--f-ui);font-size:0.52rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted2);border-bottom:1px solid var(--border2);font-weight:500}
 .po-tbl th:last-child,.po-tbl td:last-child{text-align:right}
 .po-tbl td{padding:0.7rem 0.4rem;border-bottom:1px solid var(--border);color:var(--ink);vertical-align:middle}
@@ -4740,17 +4742,47 @@ function markNotInterested(visitId) {
 
 function markNeedsFollowup(visitId, statusLabel) {
   statusLabel = statusLabel || 'Needs Follow-up';
-  var reason = prompt('Why do you need to reconnect with this customer?', '');
-  if (reason === null) return;
-  var dateStr = prompt('Next follow-up date (YYYY-MM-DD):', '');
-  if (dateStr === null) return;
-  dateStr = dateStr.trim();
-  if (dateStr && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) { alert('Please enter the date as YYYY-MM-DD.'); return; }
+  var existing = document.getElementById('followup-modal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'followup-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,16,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML =
+    '<div style="background:var(--cream);max-width:420px;width:100%;border-top:3px solid #8B6F1F">'
+    + '<div style="padding:1.3rem 1.8rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+    + '<div style="font-family:var(--f-display);font-size:1.2rem;font-weight:500;color:var(--dark)">' + statusLabel + '</div>'
+    + '<button onclick="document.getElementById(\'followup-modal\').remove()" style="background:none;border:1px solid var(--border2);color:var(--muted);width:30px;height:30px;cursor:pointer;font-size:1.1rem">&times;</button>'
+    + '</div>'
+    + '<div style="padding:1.5rem 1.8rem">'
+
+    + '<label class="fl">Why do you need to reconnect with this customer?</label>'
+    + '<textarea class="fi" id="fu-reason" rows="2" placeholder="e.g. Customer asked for more time" style="resize:vertical;font-family:var(--f-body)"></textarea>'
+
+    + '<label class="fl">Next Follow-up Date</label>'
+    + '<input class="fi" id="fu-modal-date" type="date">'
+
+    + '<button id="fu-modal-save-btn" onclick="submitFollowupModal(\'' + visitId + '\',\'' + statusLabel + '\')" style="width:100%;margin-top:0.8rem;background:#8B6F1F;color:var(--cream);border:none;padding:0.9rem;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;cursor:pointer;font-weight:500" onmouseover="this.style.background=\'var(--gold)\'" onmouseout="this.style.background=\'#8B6F1F\'">Save</button>'
+    + '<div id="followup-modal-error" style="display:none;color:#C0392B;font-family:var(--f-ui);font-size:0.7rem;margin-top:0.6rem"></div>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+}
+
+function submitFollowupModal(visitId, statusLabel) {
+  var reason = document.getElementById('fu-reason').value.trim();
+  var dateStr = document.getElementById('fu-modal-date').value; // native date input — already YYYY-MM-DD
+  var errEl = document.getElementById('followup-modal-error');
+
+  var btn = document.getElementById('fu-modal-save-btn');
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'Saving...'; btn.style.opacity = '0.6';
 
   var v = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
   var combined = appendRemark_(v ? v.remarks : '', statusLabel, reason);
   postStatusUpdate_(visitId, { status: statusLabel, remarks: combined, next_followup_date: dateStr }, function(){
     if (v) { v.status = statusLabel; v.remarks = combined; if (dateStr) v.next_followup_date = dateStr; }
+    var m = document.getElementById('followup-modal');
+    if (m) m.remove();
   });
 }
 
