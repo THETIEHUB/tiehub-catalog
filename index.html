@@ -5785,20 +5785,46 @@ function loadDataFromBackend() {
 // Rebuild CATS_META from the loaded PRODUCTS
 // ---- CATEGORY HERO IMAGES ----
 // Custom uploaded images for category cards on the home page.
-// Add more here as you upload them to /images/ folder.
+// All files live in the /images/ folder in this same GitHub repo.
 const CATEGORY_IMAGES = {
-  'Cufflinks':       'images/cufflinks.jpg',
-  'Bow Ties':        'images/bow-ties.jpeg',
-  'PU Belts':        'images/pu-belts.jpg',
-  'Belts':           'images/pu-belts.jpg',   // alias
-  'Cravats':         'images/cravats.jpg',
-  // Add more as you upload, examples:
-  // 'Neckties':       'images/neckties.jpg',
-  // 'Pocket Squares': 'images/pocket-squares.jpg',
-  // 'Polos':          'images/polos.jpg',
-  // 'Lapel Pin':      'images/lapel-pins.jpg',
-  // 'Tie Pin':        'images/tie-pins.jpg',
-  // 'Bags':           'images/bags.jpg',
+  'Cufflinks':                     'images/cufflinks.jpg',
+  'Bow Ties':                      'images/bow-ties.jpeg', // file was deleted from repo — re-upload to restore
+  'PU Belts':                      'images/pu-belts.jpg',
+  'Belts':                         'images/pu-belts.jpg',   // alias
+  'Cravats':                       'images/cravats.jpg',
+  'Pocket Watch':                  'images/Pocket Watch.jpg',
+  'Shirt Tucker':                  'images/Shirt Tucker.jpg',
+  'TShirt':                        'images/T-Shirt.jpg',
+  // Everything below is from your prepared batch — only add a line once
+  // you've actually uploaded that file into /images/ on GitHub. Until then,
+  // that category just falls back to a product photo, which is harmless.
+  'Necktie':                       'images/Necktie.png',
+  'Combo':                         'images/Combo.jpg',
+  'Pocket Square':                 'images/Pocketsquare.png',
+  'Metal Lapel Pin':               'images/Metal Lapel Pin.jpg',
+  'Caps':                          'images/Caps.png',
+  'Bright Socks':                  'images/Bright Socks.jpg',
+  'Tie Pin':                       'images/Tie Pin.png',
+  'Scarves':                       'images/Scarves.jpg',
+  'Mask':                          'images/Face Mask.png',
+  'Suspender':                     'images/Suspender.png',
+  'Neckerchief':                   'images/Neckerchief.jpg',
+  'Hats':                          'images/Hats.avif',
+  'Women Scarves':                 'images/Women Scarf.png',
+  'Handkerchief':                  'images/Handkerchief.png',
+  'Loafer Socks':                  'images/Loafer Socks.png',
+  'Lapel Pin':                     'images/Lapel Pin.png',
+  'Boutonniere':                   'images/Boutonniere.avif',
+  'Rakhi':                         'images/Rakhi.png',
+  'Cummerbund':                    'images/Cummerbund.png',
+  'Bags':                          'images/Bag.png',
+  'Tuxedo Button':                 'images/Tuxedo Button.png',
+  // Best-guess matches — please confirm these look right once uploaded:
+  'Pocket Square Holder':          'images/Pocketsquare Hold.png',
+  'Magnetic Metal Pocket Brooch':  'images/Metal Broch Pin.jpg',
+  'Wrist Band':                    'images/Bracelet.jpg',
+  'Button Case':                   'images/Button Cover.png'
+  // Still missing images entirely as far as I can tell: Sticker, Hand Sleeves
 };
 
 function rebuildCatsMeta() {
@@ -5812,8 +5838,9 @@ function rebuildCatsMeta() {
   }
   CATS_META = [];
   for (var cat in counts) {
-    // Use custom uploaded image if available, otherwise fall back to first product image
-    var img = CATEGORY_IMAGES[cat] || firstImg[cat] || '';
+    // Use custom uploaded image if available, otherwise fall back to first product image.
+    // encodeURI handles filenames with spaces safely.
+    var img = CATEGORY_IMAGES[cat] ? encodeURI(CATEGORY_IMAGES[cat]) : (firstImg[cat] || '');
     CATS_META.push({name: cat, count: counts[cat], img: img});
   }
   // Sort by count desc
