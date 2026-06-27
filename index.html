@@ -1519,6 +1519,13 @@ function isPlausibleMaterial(cat, material) {
   return whitelist.indexOf(material) !== -1;
 }
 
+// Filters an array of materials down to just the ones that make sense for
+// this product's own category — e.g. drops "Brass" from a necktie's
+// material list while keeping "Silk".
+function plausibleMaterials(cat, materials) {
+  return (materials || []).filter(function(m){ return isPlausibleMaterial(cat, m); });
+}
+
 const STYLE_RULES = [
   [['cufflink','lapel','tie pin','tiepin','button','brooch','pocket watch','tuxedo','pen stand','cuff','pocket square','necktie','tie'], 'Formal'],
   [['bow','cravat','boutonniere','ascot'], 'Wedding'],
@@ -1537,8 +1544,8 @@ function matchRule(cat, rules) {
   return 'Other';
 }
 
-function getMaterial(p) { return p.material || matchRule(p.cat, MATERIAL_RULES); }
-function getStyle(p) { return p.style || matchRule(p.cat, STYLE_RULES); }
+function getMaterial(p) { return (p.material && p.material.length) ? p.material : [matchRule(p.cat, MATERIAL_RULES)]; }
+function getStyle(p) { return (p.style && p.style.length) ? p.style : [matchRule(p.cat, STYLE_RULES)]; }
 
 // ===== AUTO COLOR DETECTION FROM IMAGES =====
 // Detects dominant product color by sampling image pixels (ignoring light background).
@@ -1566,6 +1573,30 @@ var COLOR_PALETTE = [
   ['Beige',   [210,190,150]],
 ];
 
+var COLOR_FAMILY_WORDS = ['Black','White','Grey','Gray','Brown','Red','Maroon','Pink','Orange','Yellow','Green','Blue','Purple','Gold','Silver','Beige','Multi'];
+var COLOR_FAMILY_SPECIAL = {
+  'navy':'Blue','teal':'Blue','turquoise':'Blue','cyan':'Blue','indigo':'Blue',
+  'gunmetal':'Grey','charcoal':'Grey','slate':'Grey','ash':'Grey',
+  'cream':'White','ivory':'White','off white':'White','off-white':'White',
+  'khaki':'Brown','tan':'Brown','camel':'Brown','mocha':'Brown','coffee':'Brown',
+  'olive':'Green','mint':'Green','lime':'Green','emerald':'Green','forest':'Green',
+  'wine':'Maroon','burgundy':'Maroon','rust':'Maroon',
+  'lavender':'Purple','violet':'Purple','lilac':'Purple',
+  'coral':'Orange','peach':'Orange','salmon':'Orange',
+  'magenta':'Pink','fuchsia':'Pink','rose':'Pink',
+  'mustard':'Yellow','lemon':'Yellow','amber':'Yellow'
+};
+function normalizeColorFamily(raw) {
+  var lower = String(raw).toLowerCase().trim();
+  for (var i = 0; i < COLOR_FAMILY_WORDS.length; i++) {
+    var word = COLOR_FAMILY_WORDS[i];
+    var re = new RegExp('\\b' + word.toLowerCase() + '\\b', 'i');
+    if (re.test(lower)) return word === 'Gray' ? 'Grey' : word;
+  }
+  if (COLOR_FAMILY_SPECIAL[lower]) return COLOR_FAMILY_SPECIAL[lower];
+  return String(raw).trim();
+}
+
 function nearestColorName(r, g, b) {
   var best = 'Multi', bestDist = Infinity;
   for (var i = 0; i < COLOR_PALETTE.length; i++) {
@@ -1573,7 +1604,10 @@ function nearestColorName(r, g, b) {
     var d = (r-c[0])*(r-c[0]) + (g-c[1])*(g-c[1]) + (b-c[2])*(b-c[2]);
     if (d < bestDist) { bestDist = d; best = COLOR_PALETTE[i][0]; }
   }
-  return best;
+  // The palette itself has fine shades (Navy, Sky Blue, Teal...) for more
+  // accurate nearest-neighbor matching, but the name returned should be the
+  // broader color family — same rule as the manually entered sheet colors.
+  return normalizeColorFamily(best);
 }
 
 function detectColorFromImage(imgUrl, sku, callback) {
@@ -1613,12 +1647,12 @@ function detectColorFromImage(imgUrl, sku, callback) {
 // Analyse colors for all products in the current category (async, then rebuild filter)
 function analyzeColorsForCategory(products, done) {
   var pending = 0, analyzed = 0;
-  var toScan = products.filter(function(p){ return p.img && !COLOR_CACHE[p.sku]; }).slice(0, 200); // cap per pass
+  var toScan = products.filter(function(p){ return p.img && !p.color && !COLOR_CACHE[p.sku]; }).slice(0, 200); // cap per pass
   if (!toScan.length) { done(); return; }
   toScan.forEach(function(p) {
     pending++;
     detectColorFromImage(p.img, p.sku, function(color) {
-      if (color) p.color = color;
+      if (color && !p.color) p.color = [color];
       analyzed++;
       if (analyzed >= toScan.length) done();
     });
@@ -1848,25 +1882,27 @@ function getFiltered() {
     list = list.filter(function(p){ return p.mrp >= prMin && p.mrp <= prMax; });
   }
 
-  // Material filter (checkboxes — multi-select)
+  // Material filter (checkboxes — multi-select). A product matches if ANY
+  // of its (plausible) materials is checked.
   const matChecked = Array.from(document.querySelectorAll('input[name="f-material"]:checked')).map(i=>i.value);
-  if (matChecked.length) list = list.filter(p => matChecked.includes(getMaterial(p)) && isPlausibleMaterial(p.cat, getMaterial(p)));
+  if (matChecked.length) list = list.filter(p => plausibleMaterials(p.cat, getMaterial(p)).some(m => matChecked.includes(m)));
 
-  // Style filter
+  // Style filter — same any-match logic
   const styleChecked = Array.from(document.querySelectorAll('input[name="f-style"]:checked')).map(i=>i.value);
-  if (styleChecked.length) list = list.filter(p => styleChecked.includes(getStyle(p)));
+  if (styleChecked.length) list = list.filter(p => getStyle(p).some(s => styleChecked.includes(s)));
 
   // Pattern filter (only works if sheet has 'pattern' column)
   const patChecked = Array.from(document.querySelectorAll('input[name="f-pattern"]:checked')).map(i=>i.value);
-  if (patChecked.length) list = list.filter(p => p.pattern && patChecked.includes(p.pattern));
+  if (patChecked.length) list = list.filter(p => p.pattern && p.pattern.some(pt => patChecked.includes(pt)));
 
   // Size filter (only works if sheet has 'size' column)
   const sizeChecked = Array.from(document.querySelectorAll('input[name="f-size"]:checked')).map(i=>i.value);
-  if (sizeChecked.length) list = list.filter(p => p.size && sizeChecked.includes(p.size));
+  if (sizeChecked.length) list = list.filter(p => p.size && p.size.some(sz => sizeChecked.includes(sz)));
 
-  // Color filter (only works if sheet has 'color' column)
+  // Color filter (only works if sheet has 'color' column) — a two-tone
+  // product like "Blue & White" is findable under either color.
   const colChecked = Array.from(document.querySelectorAll('input[name="f-color"]:checked')).map(i=>i.value);
-  if (colChecked.length) list = list.filter(p => p.color && colChecked.includes(p.color));
+  if (colChecked.length) list = list.filter(p => p.color && p.color.some(c => colChecked.includes(c)));
 
   // Sort — "default" now means highest price first
   const sort = document.getElementById('sort-sel')?.value || 'default';
@@ -1922,18 +1958,13 @@ function buildFilterSidebar() {
   const sizeCounts = {};
   const colorCounts = {};
   inCat.forEach(p => {
-    const m = getMaterial(p);
-    // Skip counting a material that doesn't make sense for this product's
-    // own category (e.g. "Brass" on a necktie row) — this hides it from the
-    // filter sidebar entirely, regardless of why the data says that.
-    if (isPlausibleMaterial(p.cat, m)) {
-      matCounts[m] = (matCounts[m] || 0) + 1;
-    }
-    const s = getStyle(p);
-    styleCounts[s] = (styleCounts[s] || 0) + 1;
-    if (p.pattern) patternCounts[p.pattern] = (patternCounts[p.pattern] || 0) + 1;
-    if (p.size) sizeCounts[p.size] = (sizeCounts[p.size] || 0) + 1;
-    if (p.color) colorCounts[p.color] = (colorCounts[p.color] || 0) + 1;
+    // A product with multiple values (e.g. color "Blue & White") counts
+    // toward EVERY value listed, so it's findable under either one.
+    plausibleMaterials(p.cat, getMaterial(p)).forEach(m => { matCounts[m] = (matCounts[m] || 0) + 1; });
+    getStyle(p).forEach(s => { styleCounts[s] = (styleCounts[s] || 0) + 1; });
+    (p.pattern || []).forEach(pt => { patternCounts[pt] = (patternCounts[pt] || 0) + 1; });
+    (p.size || []).forEach(sz => { sizeCounts[sz] = (sizeCounts[sz] || 0) + 1; });
+    (p.color || []).forEach(c => { colorCounts[c] = (colorCounts[c] || 0) + 1; });
   });
 
   // Remember which options were checked before re-render, for every group —
@@ -1944,50 +1975,50 @@ function buildFilterSidebar() {
   var checkedPatterns = Array.from(document.querySelectorAll('input[name="f-pattern"]:checked')).map(i=>i.value);
   var checkedSizes    = Array.from(document.querySelectorAll('input[name="f-size"]:checked')).map(i=>i.value);
 
-  // Render material checkboxes
+  // Render material checkboxes — alphabetical (A-Z)
   document.getElementById('filter-materials').innerHTML =
-    Object.entries(matCounts).sort((a,b)=>b[1]-a[1])
+    Object.entries(matCounts).sort((a,b)=>a[0].localeCompare(b[0]))
       .map(([m,c]) => `<label class="fopt"><input type="checkbox" name="f-material" value="${m}" ${checkedMats.indexOf(m)!==-1?'checked':''} onchange="renderProducts()"> ${m}<span class="fopt-count">${c}</span></label>`)
       .join('');
 
-  // Render style checkboxes
+  // Render style checkboxes — alphabetical (A-Z)
   document.getElementById('filter-styles').innerHTML =
-    Object.entries(styleCounts).sort((a,b)=>b[1]-a[1])
+    Object.entries(styleCounts).sort((a,b)=>a[0].localeCompare(b[0]))
       .map(([s,c]) => `<label class="fopt"><input type="checkbox" name="f-style" value="${s}" ${checkedStyles.indexOf(s)!==-1?'checked':''} onchange="renderProducts()"> ${s}<span class="fopt-count">${c}</span></label>`)
       .join('');
 
-  // Show Pattern filter ONLY if sheet has pattern data
+  // Show Pattern filter ONLY if sheet has pattern data — alphabetical (A-Z)
   const patternGroup = document.getElementById('pattern-filter-group');
   if (Object.keys(patternCounts).length > 0) {
     patternGroup.style.display = 'block';
     document.getElementById('filter-patterns').innerHTML =
-      Object.entries(patternCounts).sort((a,b)=>b[1]-a[1])
+      Object.entries(patternCounts).sort((a,b)=>a[0].localeCompare(b[0]))
         .map(([p,c]) => `<label class="fopt"><input type="checkbox" name="f-pattern" value="${p}" ${checkedPatterns.indexOf(p)!==-1?'checked':''} onchange="renderProducts()"> ${p}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
     patternGroup.style.display = 'none';
   }
 
-  // Show Size filter ONLY if sheet has size data
+  // Show Size filter ONLY if sheet has size data — alphabetical (A-Z)
   const sizeGroup = document.getElementById('size-filter-group');
   if (Object.keys(sizeCounts).length > 0) {
     sizeGroup.style.display = 'block';
     document.getElementById('filter-sizes').innerHTML =
-      Object.entries(sizeCounts).sort((a,b)=>b[1]-a[1])
+      Object.entries(sizeCounts).sort((a,b)=>a[0].localeCompare(b[0]))
         .map(([sz,c]) => `<label class="fopt"><input type="checkbox" name="f-size" value="${sz}" ${checkedSizes.indexOf(sz)!==-1?'checked':''} onchange="renderProducts()"> ${sz}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
     sizeGroup.style.display = 'none';
   }
 
-  // Show Color filter — auto-detected from images
+  // Show Color filter — auto-detected from images — alphabetical (A-Z)
   const colorGroup = document.getElementById('color-filter-group');
   // Remember which colors were checked before re-render
   var checkedColors = Array.from(document.querySelectorAll('input[name="f-color"]:checked')).map(function(i){return i.value;});
   if (Object.keys(colorCounts).length > 0) {
     colorGroup.style.display = 'block';
     document.getElementById('filter-colors').innerHTML =
-      Object.entries(colorCounts).sort((a,b)=>b[1]-a[1])
+      Object.entries(colorCounts).sort((a,b)=>a[0].localeCompare(b[0]))
         .map(([col,c]) => `<label class="fopt"><input type="checkbox" name="f-color" value="${col}" ${checkedColors.indexOf(col)!==-1?'checked':''} onchange="renderProducts()"> ${col}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
@@ -2414,16 +2445,17 @@ async function exportCatalogLookbook(perPage) {
   var productPagesHTML = pages.map(function(group, pageIdx){
     var isHero = perPage === 1;
     var cellsHTML = group.map(function(p){
-      var material = (typeof getMaterial === 'function' ? getMaterial(p) : '') || '';
+      var materialArr = (typeof getMaterial === 'function' ? plausibleMaterials(p.cat, getMaterial(p)) : []) || [];
+      var material = materialArr.join(', ');
       var imgBlock = p.img
         ? '<img src="'+p.img+'" onerror="this.parentNode.innerHTML=lbMissingImgHTML();">'
         : lbMissingImgHTML();
       // Color/pattern only show when actually present in the product data — never invented
       var specPairs = [];
       if (material) specPairs.push(['Material', material]);
-      if (p.color)  specPairs.push(['Color', p.color]);
-      if (p.pattern) specPairs.push(['Pattern', p.pattern]);
-      if (p.size)   specPairs.push(['Size', p.size]);
+      if (p.color && p.color.length)   specPairs.push(['Color', p.color.join(', ')]);
+      if (p.pattern && p.pattern.length) specPairs.push(['Pattern', p.pattern.join(', ')]);
+      if (p.size && p.size.length)     specPairs.push(['Size', p.size.join(', ')]);
 
       if (isHero) {
         // Editorial two-column hero page — bigger photo on the left, info
