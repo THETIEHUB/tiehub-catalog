@@ -1048,7 +1048,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <span style="margin-left:auto;font-size:0.62rem;color:var(--muted);font-family:var(--f-ui);letter-spacing:0.15em" id="result-info"></span>
     <button class="export-pdf-btn" onclick="shareFilteredOnWhatsApp()" title="Share current view on WhatsApp" style="background:#25D366">📱 WhatsApp</button>
     <button class="export-pdf-btn" onclick="openBulkImport()" title="Upload Excel file to bulk-add products">⬆ Bulk Order</button>
-    <button class="export-pdf-btn" onclick="exportCatalogPDF()" title="Download current products as PDF">⬇ Export PDF</button>
+    <button class="export-pdf-btn" onclick="openLookbookOptionsModal('pdf')" title="Download current products as PDF">⬇ Export PDF</button>
     <button class="export-pdf-btn" onclick="openLookbookOptionsModal()" title="View as a flipbook lookbook" style="background:#8B6F1F">📖 Lookbook</button>
   </div>
 
@@ -2317,24 +2317,27 @@ document.addEventListener('click', function(e){
 function loadMore() { displayLimit += 80; renderProducts(); }
 
 // ===== EXPORT FILTERED PRODUCTS AS PDF =====
-function openLookbookOptionsModal() {
+function openLookbookOptionsModal(exportType) {
+  exportType = exportType === 'pdf' ? 'pdf' : 'lookbook';
   var existing = document.getElementById('lookbook-options-modal');
   if (existing) existing.remove();
 
   var modal = document.createElement('div');
   modal.id = 'lookbook-options-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,16,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  var titleText = exportType === 'pdf' ? 'Export PDF Layout' : 'Lookbook Layout';
+  var callFn = exportType === 'pdf' ? 'exportCatalogPDF' : 'exportCatalogLookbook';
   modal.innerHTML =
     '<div style="background:var(--cream);max-width:420px;width:100%;border-top:3px solid #8B6F1F">'
     + '<div style="padding:1.3rem 1.8rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
-    + '<div style="font-family:var(--f-display);font-size:1.2rem;font-weight:500;color:var(--dark)">Lookbook Layout</div>'
+    + '<div style="font-family:var(--f-display);font-size:1.2rem;font-weight:500;color:var(--dark)">' + titleText + '</div>'
     + '<button onclick="document.getElementById(\'lookbook-options-modal\').remove()" style="background:none;border:1px solid var(--border2);color:var(--muted);width:30px;height:30px;cursor:pointer;font-size:1.1rem">&times;</button>'
     + '</div>'
     + '<div style="padding:1.5rem 1.8rem">'
     + '<label class="fl">Products per page</label>'
     + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.5rem;margin-top:0.4rem">'
     + [1,2,3,4,5].map(function(n){
-        return '<button onclick="exportCatalogLookbook(' + n + ')" style="padding:0.7rem 0;background:' + (n===4?'var(--dark)':'#fff') + ';color:' + (n===4?'#fff':'var(--ink)') + ';border:1px solid var(--border2);font-family:var(--f-ui);font-size:0.85rem;cursor:pointer;font-weight:600">' + n + '</button>';
+        return '<button onclick="' + callFn + '(' + n + ')" style="padding:0.7rem 0;background:' + (n===4?'var(--dark)':'#fff') + ';color:' + (n===4?'#fff':'var(--ink)') + ';border:1px solid var(--border2);font-family:var(--f-ui);font-size:0.85rem;cursor:pointer;font-weight:600">' + n + '</button>';
       }).join('')
     + '</div>'
     + '<div style="font-family:var(--f-ui);font-size:0.65rem;color:var(--muted);margin-top:0.7rem">More per page = smaller images, more products per sheet. Fewer per page = larger hero-style images.</div>'
@@ -2342,7 +2345,19 @@ function openLookbookOptionsModal() {
   document.body.appendChild(modal);
 }
 
-function exportCatalogLookbook(perPage) {
+// Live lookup against Final_Data for a specific batch of SKUs only — used
+// by the Lookbook's hero layout to show real product descriptions without
+// ever importing/storing this data in the Products sheet itself.
+function fetchProductEnrichment_(skuList) {
+  var url = BACKEND_URL + '?action=get_product_enrichment'
+    + '&skus=' + encodeURIComponent(skuList.join(','))
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  return fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    return (data && data.ok) ? data.data : {};
+  });
+}
+
+async function exportCatalogLookbook(perPage) {
   perPage = [1,2,3,4,5].includes(perPage) ? perPage : 4;
   var optionsModal = document.getElementById('lookbook-options-modal');
   if (optionsModal) optionsModal.remove();
@@ -2374,6 +2389,20 @@ function exportCatalogLookbook(perPage) {
     if (!proceed) { win.close(); return; }
   }
 
+  // Only the hero (1-per-page) layout has room for a description, so only
+  // bother fetching it then — a live lookup against Final_Data for just
+  // these SKUs, never the whole catalog and never stored in the Products
+  // sheet itself.
+  var enrichment = {};
+  if (perPage === 1) {
+    try {
+      enrichment = await fetchProductEnrichment_(items.map(function(p){ return p.sku; }));
+    } catch (e) {
+      // If the lookup fails for any reason, just proceed without descriptions
+      enrichment = {};
+    }
+  }
+
   // ---- Build product pages: perPage products per page, photo-only style ----
   var gridCols = perPage <= 1 ? 1 : 2;
   var gridRows = Math.ceil(perPage / gridCols);
@@ -2383,29 +2412,76 @@ function exportCatalogLookbook(perPage) {
   }
 
   var productPagesHTML = pages.map(function(group, pageIdx){
+    var isHero = perPage === 1;
     var cellsHTML = group.map(function(p){
       var material = (typeof getMaterial === 'function' ? getMaterial(p) : '') || '';
       var imgBlock = p.img
         ? '<img src="'+p.img+'" onerror="this.parentNode.innerHTML=lbMissingImgHTML();">'
         : lbMissingImgHTML();
       // Color/pattern only show when actually present in the product data — never invented
-      var specParts = [];
-      if (material) specParts.push('<div><span class="lb-spec-lbl">Material</span>' + material + '</div>');
-      if (p.color)  specParts.push('<div><span class="lb-spec-lbl">Color</span>' + p.color + '</div>');
-      if (p.pattern) specParts.push('<div><span class="lb-spec-lbl">Pattern</span>' + p.pattern + '</div>');
-      if (p.size)   specParts.push('<div><span class="lb-spec-lbl">Size</span>' + p.size + '</div>');
-      var specRow = specParts.length ? '<div class="lb-spec-row">' + specParts.join('') + '</div>' : '';
+      var specPairs = [];
+      if (material) specPairs.push(['Material', material]);
+      if (p.color)  specPairs.push(['Color', p.color]);
+      if (p.pattern) specPairs.push(['Pattern', p.pattern]);
+      if (p.size)   specPairs.push(['Size', p.size]);
+
+      if (isHero) {
+        // Editorial two-column hero page — bigger photo on the left, info
+        // panel on the right. Specs and stock/price are real product data
+        // only; no invented marketing copy or lifestyle photography (those
+        // need actual product descriptions and staged photos we don't have).
+        var ready = readyStock(p), raw = rawStock(p);
+        var stockTxt = raw > 0 ? (ready + ' Ready &middot; ' + raw + ' Made-to-Order') : (ready + ' In Stock');
+        var stockColor = ready > 0 ? '#3A6B3A' : '#A33';
+        var enrich = enrichment[p.sku.toUpperCase()];
+        var aboutSnippet = '';
+        if (enrich && enrich.aboutTie) {
+          var raw = enrich.aboutTie.trim();
+          aboutSnippet = raw.length > 200 ? raw.slice(0, 200).replace(/\s+\S*$/, '') + '…' : raw;
+        }
+        var heroAbout = aboutSnippet
+          ? '<div class="lb-hero-about">' + aboutSnippet + '</div>'
+          : '';
+        var heroSpecStack = specPairs.length
+          ? '<div class="lb-hero-spec-stack">' + specPairs.map(function(sp){
+              return '<div class="lb-hero-spec-stack-row"><span class="lb-hero-spec-stack-lbl">' + sp[0] + '</span><span class="lb-hero-spec-stack-val">' + sp[1] + '</span></div>';
+            }).join('') + '</div>'
+          : '';
+        return '<div class="lb-hero-cell">'
+          + '<div class="lb-hero-left"><div class="lb-hero-imgwrap">' + imgBlock + '</div></div>'
+          + '<div class="lb-hero-right">'
+          + '<div class="lb-hero-sku">' + p.sku + '</div>'
+          + '<div class="lb-hero-price">Rs ' + p.mrp.toLocaleString('en-IN') + '</div>'
+          + '<div class="lb-hero-divider"></div>'
+          + heroAbout
+          + heroSpecStack
+          + '<div class="lb-hero-stock" style="color:' + stockColor + '">' + stockTxt + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+
+      var ready2 = readyStock(p), raw2 = rawStock(p);
+      var stockTxt2 = raw2 > 0 ? (ready2 + ' Ready + ' + raw2 + ' MTO') : (ready2 > 0 ? ready2 + ' In Stock' : 'Out of Stock');
+      var stockColor2 = ready2 > 0 ? '#3A6B3A' : '#A33';
+      var specLine = specPairs.length
+        ? '<div class="lb-spec-line">' + specPairs.map(function(sp){ return sp[1]; }).join(' &middot; ') + '</div>'
+        : '';
       return '<div class="lb-cell">'
         + '<div class="lb-imgwrap">' + imgBlock + '</div>'
-        + '<div class="lb-info"><div class="lb-sku">' + p.sku + '</div>' + specRow + '</div>'
+        + '<div class="lb-info">'
+        + '<div class="lb-sku-row"><span class="lb-sku">' + p.sku + '</span><span class="lb-cell-price">Rs ' + p.mrp.toLocaleString('en-IN') + '</span></div>'
+        + '<div class="lb-cell-divider"></div>'
+        + specLine
+        + '<div class="lb-cell-stock" style="color:' + stockColor2 + '">' + stockTxt2 + '</div>'
+        + '</div>'
         + '</div>';
     }).join('');
-    // Pad to always have 4 cells so the grid stays even on the last page
+    // Pad to always have a full grid so the layout stays even on the last page
     var padCount = perPage - group.length;
     for (var k = 0; k < padCount; k++) cellsHTML += '<div class="lb-cell lb-cell-empty"></div>';
     return '<div class="lb-page lb-product-page">'
       + '<div class="lb-page-head"><span>The Tie Hub</span><span class="lb-page-head-cat">' + catName + '</span></div>'
-      + '<div class="lb-grid">' + cellsHTML + '</div>'
+      + '<div class="' + (isHero ? 'lb-hero-wrap' : 'lb-grid') + '">' + cellsHTML + '</div>'
       + '<div class="lb-page-foot">' + (pageIdx + 2) + '</div>'
       + '</div>';
   }).join('');
@@ -2518,7 +2594,30 @@ function exportCatalogLookbook(perPage) {
     + '.lb-spec-row{display:flex;flex-wrap:wrap;gap:10px;font-family:"Inter",sans-serif;font-size:6.5pt;color:#7A6E5C;margin-top:5px;border-top:0.5px dashed #E5DCC8;padding-top:5px}'
     + '.lb-spec-row div{line-height:1.4}'
     + '.lb-spec-lbl{color:#B7A98A;text-transform:uppercase;letter-spacing:0.4px;font-size:5.8pt;display:block}'
+    + '.lb-sku-row{display:flex;justify-content:space-between;align-items:baseline}'
+    + '.lb-cell-price{font-family:"Inter",sans-serif;font-size:7.5pt;font-weight:600;color:#8B6F1F}'
+    + '.lb-cell-divider{width:18px;height:0.5px;background:#C7A653;margin:4px 0 5px}'
+    + '.lb-spec-line{font-family:"Inter",sans-serif;font-size:6pt;letter-spacing:0.02em;color:#7A6E5C}'
+    + '.lb-cell-stock{font-family:"Inter",sans-serif;font-size:5.8pt;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;margin-top:4px}'
     + '.lb-page-foot{text-align:center;font-family:"Inter",sans-serif;font-size:6.5pt;color:#B7A98A;letter-spacing:0.15em;margin-top:7mm}'
+
+    // Hero page (1 product per page) — editorial layout, mirrors the cover's
+    // calm centered treatment instead of a stretched grid cell
+    + '.lb-hero-wrap{flex:1;display:flex;min-height:0}'
+    + '.lb-hero-cell{flex:1;display:flex;gap:8mm;min-height:0;padding:4mm 8mm}'
+    + '.lb-hero-left{flex:1.15;display:flex;min-height:0}'
+    + '.lb-hero-imgwrap{flex:1;min-height:0;background:#FBF8F1;border:0.5px solid #F0E9DA;display:flex;align-items:center;justify-content:center;overflow:hidden}'
+    + '.lb-hero-imgwrap img{max-width:86%;max-height:86%;object-fit:contain}'
+    + '.lb-hero-right{flex:1;display:flex;flex-direction:column;justify-content:center;padding-left:2mm}'
+    + '.lb-hero-sku{font-family:"DM Serif Display",serif;font-size:14pt;color:#1A1612;letter-spacing:0.01em}'
+    + '.lb-hero-price{font-family:"Playfair Display",serif;font-size:19pt;font-weight:500;color:#8B6F1F;margin-top:5px}'
+    + '.lb-hero-divider{width:36px;height:1px;background:#C7A653;margin:7mm 0 5mm}'
+    + '.lb-hero-about{font-family:"Cormorant Garamond",serif;font-size:9.5pt;line-height:1.55;color:#5A5045;margin-bottom:6mm}'
+    + '.lb-hero-spec-stack-row{display:flex;justify-content:space-between;align-items:baseline;padding:4mm 0;border-top:0.5px dashed #E5DCC8}'
+    + '.lb-hero-spec-stack-row:first-child{border-top:none;padding-top:0}'
+    + '.lb-hero-spec-stack-lbl{font-family:"Inter",sans-serif;font-size:6.8pt;letter-spacing:0.22em;text-transform:uppercase;color:#B7A98A}'
+    + '.lb-hero-spec-stack-val{font-family:"Cormorant Garamond",serif;font-size:11pt;color:#1A1612}'
+    + '.lb-hero-stock{margin-top:6mm;font-family:"Inter",sans-serif;font-size:7.5pt;letter-spacing:0.12em;text-transform:uppercase;font-weight:600}'
 
     // Closing/back page — mirrors cover frame, different content block
     + '.lb-back-thanks{font-family:"Playfair Display",serif;font-size:22pt;font-weight:500;letter-spacing:0.06em;color:#1A1612;font-style:italic}'
@@ -2621,7 +2720,11 @@ function exportCatalogLookbook(perPage) {
   win.document.close();
 }
 
-function exportCatalogPDF() {
+function exportCatalogPDF(perPage) {
+  perPage = [1,2,3,4,5].includes(perPage) ? perPage : 4;
+  var optionsModal = document.getElementById('lookbook-options-modal');
+  if (optionsModal) optionsModal.remove();
+
   // Open the popup window immediately, synchronously, on the click — before any
   // other work runs — so browsers (especially Incognito mode) don't block it.
   var win = window.open('', '_blank');
@@ -2650,6 +2753,10 @@ function exportCatalogPDF() {
   });
   var stockSel = document.getElementById('stock-sel');
   if (stockSel && stockSel.value !== 'all') filterDesc.push('Min Stock: ' + stockSel.options[stockSel.selectedIndex].text);
+
+  // Scale the image area inversely with column count — fewer columns means
+  // bigger hero-style photos, more columns means a denser, smaller grid.
+  var pimgHeight = Math.min(320, Math.round(520 / perPage));
 
   var today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
 
@@ -2686,9 +2793,9 @@ function exportCatalogPDF() {
     + '.cat-title{font-family:"Playfair Display",serif;font-size:17pt;font-weight:500;color:#1A1612}'
     + '.filters{font-family:"Inter",sans-serif;font-size:8pt;color:#7A6E5C;margin-top:4px}'
     + '.count{font-family:"Inter",sans-serif;font-size:8pt;color:#8B6F1F;letter-spacing:0.15em;text-transform:uppercase;margin:8px 0 16px}'
-    + '.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}'
+    + '.grid{display:grid;grid-template-columns:repeat(' + perPage + ',1fr);gap:14px}'
     + '.pcard{border:1px solid #E0D8C8;background:#fff;overflow:hidden;page-break-inside:avoid}'
-    + '.pimg{width:100%;height:130px;background:#FAF6EF;display:flex;align-items:center;justify-content:center;padding:6px}'
+    + '.pimg{width:100%;height:' + pimgHeight + 'px;background:#FAF6EF;display:flex;align-items:center;justify-content:center;padding:6px}'
     + '.pimg img{max-width:100%;max-height:100%;object-fit:contain}'
     + '.noimg{font-size:34pt;color:#C7A653;font-family:serif}'
     + '.pinfo{padding:8px 10px 10px}'
