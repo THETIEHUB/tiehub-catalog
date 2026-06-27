@@ -2657,13 +2657,19 @@ async function exportCatalogLookbook(perPage) {
     + '.lb-back-contact{display:flex;flex-direction:column;gap:9px;align-items:center}'
     + '.lb-back-contact-row{font-family:"Inter",sans-serif;font-size:9pt;color:#1A1612;display:flex;flex-direction:column;align-items:center;gap:2px}'
 
-    // Print mode — flattens the flipbook into a normal printable document
+    // Print mode — flattens the flipbook into a normal printable document.
+    // Important: use display:flex (not block) and position:relative (not
+    // static) here — the hero/grid layouts need flex to stretch content to
+    // fill the full page height, and the cover/closing pages need a
+    // positioning context for their absolutely-positioned content. Forcing
+    // block+static was why the printed PDF left a big empty gap below a
+    // small photo instead of matching the live preview's proportions.
     + '@media print{'
     + '  body{overflow:visible;background:#fff}'
     + '  .lb-topbar,.lb-bottombar{display:none}'
     + '  .lb-stage{position:static;top:auto;bottom:auto;display:block;perspective:none}'
     + '  .lb-book{position:static;width:auto;height:auto;max-width:none;max-height:none;box-shadow:none}'
-    + '  .lb-page{position:static !important;display:block !important;transform:none !important;page-break-after:always;width:210mm;height:297mm}'
+    + '  .lb-page{position:relative !important;inset:auto !important;transform:none !important;page-break-after:always;width:210mm;height:297mm;display:flex !important;flex-direction:column}'
     + '  .lb-page .lb-page-back{display:none !important}'
     + '  @page{size:A4;margin:0}'
     + '}'
