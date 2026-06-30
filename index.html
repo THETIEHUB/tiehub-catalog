@@ -3855,18 +3855,17 @@ function showEmpDashboard(profile) {
 }
 
 function buildEmpHeader(profile) {
-  // Replace the header-right area with employee nav buttons
+  // Replace the header-right area with employee nav buttons.
+  // Kept minimal on purpose — Order Queue / My Customers / Payments /
+  // Abandoned Carts / Add Customer / Visits all live as tabs just below
+  // (see the .emp-tab row in page-emp), so repeating them up here too was
+  // pure duplication. This bar now only has the two things that aren't
+  // already tabs: returning to the dashboard, and leaving it to browse.
   var headerRight = document.querySelector('.header-right');
   if (!headerRight) return;
   headerRight.innerHTML =
     '<div style="display:flex;align-items:center;gap:0.5rem">'
     + '<button class="emp-nav-btn active" id="enav-dashboard" onclick="empNavClick(\'dashboard\',this)">Dashboard</button>'
-    + '<button class="emp-nav-btn" id="enav-customers" onclick="empNavClick(\'customers\',this)">My Customers</button>'
-    + '<button class="emp-nav-btn" id="enav-orders" onclick="empNavClick(\'orders\',this)">Order Queue</button>'
-    + '<button class="emp-nav-btn" id="enav-payments" onclick="empNavClick(\'payments\',this)">Payments</button>'
-    + '<button class="emp-nav-btn" id="enav-abandoned" onclick="empNavClick(\'abandoned\',this)">Abandoned Carts</button>'
-    + '<button class="emp-nav-btn" id="enav-addcust" onclick="empNavClick(\'addcust\',this)">Add Customer</button>'
-    + '<button class="emp-nav-btn" id="enav-visits" onclick="empNavClick(\'visits\',this)">Visits</button>'
     + '<button class="emp-nav-btn browse" id="enav-browse" onclick="empBrowseCatalog()">🛍 Browse Catalog</button>'
     + '</div>'
     + '<button onclick="doLogout()" style="background:none;border:1px solid var(--border2);color:var(--muted);padding:0.5rem 1rem;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;cursor:pointer;margin-left:0.5rem;transition:all 0.2s" onmouseover="this.style.color=\'#C0392B\';this.style.borderColor=\'#C0392B\'" onmouseout="this.style.color=\'\';this.style.borderColor=\'\'">Sign Out</button>';
@@ -3924,15 +3923,11 @@ function hideEmpBrowsingBanner() {
 }
 
 function empNavClick(tab, btn) {
-  document.querySelectorAll('.emp-nav-btn').forEach(function(b){ b.classList.remove('active'); });
-  btn.classList.add('active');
-  var empTab = (tab === 'orders' || tab === 'dashboard') ? 'orders'
-    : tab === 'customers' ? 'customers'
-    : tab === 'abandoned' ? 'abandoned'
-    : tab === 'addcust' ? 'addcust'
-    : tab === 'visits' ? 'visits'
-    : 'payments';
-  switchEmpTab(empTab);
+  // Only "Dashboard" lives here now — it just makes sure the dashboard
+  // page is showing (e.g. if clicked while still in Browse Catalog mode).
+  // Which specific tab is open underneath is unaffected; the .emp-tab row
+  // remembers its own selection.
+  if (EMP_PROFILE) showEmpDashboard(EMP_PROFILE);
 }
 
 function loadEmpDashboard(profile) {
@@ -4452,10 +4447,11 @@ function renderVisits() {
     // history still lives in the sheet, this is just to keep rows scannable.
     var remarksLines = v.remarks ? v.remarks.split('\n').filter(Boolean) : [];
     var recentRemarks = remarksLines.slice(-2);
+    var lastUpdatedLabel = formatLastUpdated_(v.last_updated || v.ts);
     var remarksHTML = recentRemarks.length
       ? '<div style="white-space:pre-line;font-size:0.78rem;margin-top:3px">' + recentRemarks.join('\n') + '</div>'
-        + (remarksLines.length > 2 ? '<div style="font-size:0.62rem;color:var(--muted);margin-top:2px;font-style:italic">+' + (remarksLines.length - 2) + ' earlier update' + (remarksLines.length - 2 > 1 ? 's' : '') + '</div>' : '')
-      : '';
+        + (lastUpdatedLabel ? '<div style="font-size:0.62rem;color:var(--muted);margin-top:2px">Last updated ' + lastUpdatedLabel + '</div>' : '')
+      : (lastUpdatedLabel ? '<div style="font-size:0.62rem;color:var(--muted);margin-top:2px">Last updated ' + lastUpdatedLabel + '</div>' : '');
     var remarksOrDetails = isInquiry
       ? (v.product_interest || '<em style="color:var(--muted)">—</em>') + remarksHTML
       : ('<em style="color:var(--muted)">' + (v.remarks ? '' : 'No remarks') + '</em>') + remarksHTML;
@@ -4719,6 +4715,24 @@ function markInquiryCancelled(visitId) {
 }
 
 // Builds an append-only remarks trail: keeps prior notes, adds a new dated line.
+// Turns a "yyyy-MM-dd HH:mm:ss" timestamp into a short relative label, so
+// staff can judge at a glance whether a row has actually been touched
+// recently or is just sitting untouched — separate from the overdue
+// follow-up date highlight, which only looks at the NEXT planned contact.
+function formatLastUpdated_(ts) {
+  if (!ts) return '';
+  var then = new Date(String(ts).replace(' ', 'T'));
+  if (isNaN(then.getTime())) return '';
+  var diffMs = Date.now() - then.getTime();
+  var diffHrs = diffMs / (1000 * 60 * 60);
+  if (diffHrs < 1) return 'just now';
+  if (diffHrs < 24) return Math.floor(diffHrs) + 'h ago';
+  var diffDays = Math.floor(diffHrs / 24);
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return diffDays + 'd ago';
+  return then.toLocaleDateString('en-IN', {day:'2-digit', month:'short'});
+}
+
 function appendRemark_(existing, label, note) {
   var dateLabel = new Date().toLocaleDateString('en-IN', {day:'2-digit', month:'short'});
   var line = '[' + dateLabel + ' · ' + label + ']' + (note ? ' ' + note : '');
