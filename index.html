@@ -4513,8 +4513,7 @@ function renderVisits() {
     var lastUpdatedLabel = formatLastUpdated_(v.last_updated || v.ts);
     var remarksHTML = recentRemarks.length
       ? '<div style="white-space:pre-line;font-size:0.78rem;margin-top:3px">' + recentRemarks.join('\n') + '</div>'
-        + (lastUpdatedLabel ? '<div style="font-size:0.62rem;color:var(--muted);margin-top:2px">Last updated ' + lastUpdatedLabel + '</div>' : '')
-      : (lastUpdatedLabel ? '<div style="font-size:0.62rem;color:var(--muted);margin-top:2px">Last updated ' + lastUpdatedLabel + '</div>' : '');
+      : '';
     var remarksOrDetails = isInquiry
       ? (v.product_interest || '<em style="color:var(--muted)">—</em>') + remarksHTML
       : ('<em style="color:var(--muted)">' + (v.remarks ? '' : 'No remarks') + '</em>') + remarksHTML;
@@ -4536,21 +4535,22 @@ function renderVisits() {
 
     // Follow-up date cell — collapsed by default, opens a date picker only on click
     var fuCell;
+    var lastUpdatedLine = lastUpdatedLabel ? '<div style="font-size:0.62rem;color:var(--muted);margin-top:3px">Last updated ' + lastUpdatedLabel + '</div>' : '';
     if (_openFollowupEdit === v.visit_id) {
       fuCell = '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">'
         + '<input type="date" id="fu-date-' + v.visit_id + '" value="' + (v.next_followup_date||'') + '" style="font-family:var(--f-ui);font-size:0.72rem;padding:3px 5px;border:1px solid var(--border2)">'
         + '<button class="oc-btn" onclick="updateFollowupClick(\'' + v.visit_id + '\')">Save</button>'
         + '<button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')">✕</button>'
-        + '</div>';
+        + '</div>' + lastUpdatedLine;
     } else if (v.next_followup_date) {
       var overdue = v.next_followup_date < todayStr;
       var dueToday = v.next_followup_date === todayStr;
       var color = overdue ? '#C0392B' : dueToday ? '#856404' : 'var(--ink)';
       var label = overdue ? 'Overdue: ' : dueToday ? 'Today: ' : '';
       fuCell = '<span style="color:' + color + ';font-weight:' + (overdue||dueToday?'600':'400') + '">' + label + v.next_followup_date + '</span>'
-        + ' <button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')" title="Change date">✎</button>';
+        + ' <button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')" title="Change date">✎</button>' + lastUpdatedLine;
     } else {
-      fuCell = '<span style="color:var(--muted)">Not set</span> <button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')">+ Set</button>';
+      fuCell = '<span style="color:var(--muted)">Not set</span> <button class="oc-btn" onclick="toggleFollowupEdit(\'' + v.visit_id + '\')">+ Set</button>' + lastUpdatedLine;
     }
 
     // Once a row reaches a terminal status, status buttons disappear for good —
@@ -4577,12 +4577,18 @@ function renderVisits() {
       } else if (v.status === 'Payment Pending') {
         formBtn = '<button class="oc-btn" style="background:#0F5132;color:#fff" onclick="markPaymentReceived(\'' + v.visit_id + '\')">✓ Payment Received</button>';
       }
-      actionsHTML = statusSelect + formBtn + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
+      // Inquiries: just the dropdown (+ the closure/payment form button when
+      // relevant) — no delete option, since an inquiry should always be
+      // resolved through the proper status flow, not removed.
+      actionsHTML = statusSelect + formBtn;
     } else {
       var visitOptions = VISIT_STATUSES;
       var statusSelect2 = '<select class="oc-status-select" onchange="handleStatusDropdown(\'' + v.visit_id + '\',this.value,false)">'
         + visitOptions.map(function(s){ return '<option value="' + s + '"' + (s === v.status ? ' selected' : '') + '>' + s + '</option>'; }).join('')
         + '</select>';
+      // Visits keep the delete option — these can be one-off logged entries
+      // (e.g. a mistaken duplicate) that genuinely need removing, not just
+      // a status change.
       actionsHTML = statusSelect2 + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
     }
 
@@ -4977,10 +4983,25 @@ function openLogVisitModal() {
     + '</div>'
     + '<div style="padding:1.5rem 1.8rem">'
 
+    + '<label class="fl">Is this an existing customer, or someone new?</label>'
+    + '<div style="display:flex;gap:0.6rem;margin-bottom:0.9rem">'
+    + '<label style="display:flex;align-items:center;gap:5px;font-family:var(--f-ui);font-size:0.65rem;cursor:pointer"><input type="radio" name="visit-person-type" value="existing" checked onchange="toggleVisitPersonType()"> Existing Customer</label>'
+    + '<label style="display:flex;align-items:center;gap:5px;font-family:var(--f-ui);font-size:0.65rem;cursor:pointer"><input type="radio" name="visit-person-type" value="new" onchange="toggleVisitPersonType()"> New / Walk-in Person</label>'
+    + '</div>'
+
+    + '<div id="visit-existing-block">'
     + '<label class="fl">Customer</label>'
     + '<select class="fi" id="visit-customer-select">'
     + '<option value="">— Select a customer —</option>' + customerOptions
     + '</select>'
+    + '</div>'
+
+    + '<div id="visit-new-block" style="display:none">'
+    + '<label class="fl">Name</label>'
+    + '<input class="fi" id="visit-new-name" type="text" placeholder="Name of the person or business">'
+    + '<label class="fl">Phone (optional)</label>'
+    + '<input class="fi" id="visit-new-phone" type="text" placeholder="10-digit mobile number">'
+    + '</div>'
 
     + '<label class="fl">Status</label>'
     + '<select class="fi" id="visit-status-select">'
@@ -5002,16 +5023,34 @@ function openLogVisitModal() {
   document.body.appendChild(modal);
 }
 
+function toggleVisitPersonType() {
+  var isNew = document.querySelector('input[name="visit-person-type"]:checked').value === 'new';
+  document.getElementById('visit-existing-block').style.display = isNew ? 'none' : 'block';
+  document.getElementById('visit-new-block').style.display = isNew ? 'block' : 'none';
+}
+
 function submitVisit() {
-  var sel = document.getElementById('visit-customer-select');
-  var gstin = sel.value;
-  var shop = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].getAttribute('data-name') : '';
+  var isNew = document.querySelector('input[name="visit-person-type"]:checked').value === 'new';
+  var gstin = '', shop = '', phone = '';
+
+  if (isNew) {
+    shop = document.getElementById('visit-new-name').value.trim();
+    phone = document.getElementById('visit-new-phone').value.trim();
+    // No GSTIN exists for a walk-in/new contact — that's fine, this row is
+    // tracked by name instead, same as a Log New Inquiry entry.
+  } else {
+    var sel = document.getElementById('visit-customer-select');
+    gstin = sel.value;
+    shop = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].getAttribute('data-name') : '';
+  }
+
   var status = document.getElementById('visit-status-select').value;
   var remarks = document.getElementById('visit-remarks').value.trim();
   var followupDate = document.getElementById('visit-followup-date').value;
   var errEl = document.getElementById('visit-error');
 
-  if (!gstin) { errEl.textContent = 'Please select a customer.'; errEl.style.display = 'block'; return; }
+  if (isNew && !shop) { errEl.textContent = 'Please enter a name.'; errEl.style.display = 'block'; return; }
+  if (!isNew && !gstin) { errEl.textContent = 'Please select a customer.'; errEl.style.display = 'block'; return; }
 
   var btn = document.getElementById('visit-save-btn');
   if (btn.disabled) return; // already submitting — ignore extra clicks
@@ -5023,6 +5062,7 @@ function submitVisit() {
     emp_name: EMP_PROFILE ? EMP_PROFILE.name : '',
     gstin: gstin,
     shop: shop || '',
+    phone: phone,
     status: status,
     remarks: remarks,
     next_followup_date: followupDate,
