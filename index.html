@@ -35,6 +35,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .header{background:var(--cream);padding:1.5rem 2.5rem 1.3rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
 .brand{cursor:pointer;display:flex;flex-direction:column;gap:4px}
 .brand-name{font-family:var(--f-display);font-size:1.9rem;font-weight:500;color:var(--dark);letter-spacing:0.18em;text-transform:uppercase;line-height:1}
+.brand-logo-img{height:48px;width:auto;display:block}
 .brand-sub{font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.4em;text-transform:uppercase;color:var(--muted2);font-weight:300}
 .header-right{display:flex;align-items:center;gap:1.2rem}
 .search-wrap{position:relative}
@@ -540,6 +541,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
   .topbar{display:none}
   .header{padding:0.7rem 0.8rem;height:auto;flex-wrap:wrap;gap:0.6rem}
   .brand-name{font-size:1.3rem;letter-spacing:0.08em}
+  .brand-logo-img{height:36px}
   .brand-sub{font-size:0.45rem}
   .header-right{gap:0.5rem;flex:1 1 100%;justify-content:space-between}
   .search-wrap{flex:1}
@@ -622,6 +624,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 /* ===== SMALL MOBILE ===== */
 @media(max-width:380px){
   .brand-name{font-size:1.15rem}
+  .brand-logo-img{height:30px}
   .search-inp{width:90px}
   .hero-h{font-size:1.7rem}
   .hero-stats{gap:0.9rem}
@@ -674,7 +677,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <div class="login-error" id="login-error">Invalid username or password. Please try again or contact The Tie Hub.</div>
       <div class="login-footer">
         The Tie Hub · By Big Five Inc. · Mumbai<br>
-        For access: 26130975 · dme@thetiehub.com
+        For access: 9137284461 · dme@thetiehub.com
       </div>
     </div>
   </div>
@@ -683,7 +686,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="topbar-left">
-    <span>📞 26130975</span>
+    <span>📞 9137284461</span>
     <span>📍 Vile Parle West, Mumbai - 400056</span>
   </div>
   <div class="topbar-right">
@@ -695,7 +698,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 <!-- HEADER -->
 <header class="header">
   <div class="brand" onclick="goHome()">
-    <div class="brand-name">The Tie Hub</div>
+    <img src="images/logo.png" alt="The Tie Hub" class="brand-logo-img" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="brand-name" style="display:none">The Tie Hub</div>
     <div class="brand-sub">by Big Five Inc. · B2B Wholesale</div>
   </div>
   <div class="header-right">
@@ -1157,6 +1161,17 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
           <span>Pattern</span><span class="fg-arrow">−</span>
         </div>
         <div class="fg-body" id="filter-patterns"></div>
+      </div>
+
+      <!-- PRODUCT GROUP — restricted attribute. Only present in the data at
+           all for Rajul/Vishal/Neelam (enforced server-side in Code.gs), so
+           this naturally stays hidden for anyone else; no separate
+           permission check needed here on top of that. -->
+      <div class="filter-group" id="group-filter-group" style="display:none">
+        <div class="fg-head" onclick="toggleFilterGroup(this)">
+          <span>Product Group</span><span class="fg-arrow">−</span>
+        </div>
+        <div class="fg-body" id="filter-groups"></div>
       </div>
 
       <!-- SIZE (requires sheet column) -->
@@ -1814,7 +1829,7 @@ function downloadBulkTemplate() {
     ['- For quantities exceeding ready stock, made-to-order kicks in automatically'],
     [''],
     ['NEED HELP?'],
-    ['Call: 26130975'],
+    ['Call: 9137284461'],
     ['Email: dme@thetiehub.com'],
     [''],
     ['---'],
@@ -1926,6 +1941,11 @@ function getFiltered() {
   const patChecked = Array.from(document.querySelectorAll('input[name="f-pattern"]:checked')).map(i=>i.value);
   if (patChecked.length) list = list.filter(p => p.pattern && p.pattern.some(pt => patChecked.includes(pt)));
 
+  // Product Group filter — restricted attribute, only present on the
+  // product objects at all for Rajul/Vishal/Neelam (enforced server-side).
+  const grpChecked = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(i=>i.value);
+  if (grpChecked.length) list = list.filter(p => p.product_group && grpChecked.includes(p.product_group));
+
   // Size filter (only works if sheet has 'size' column)
   const sizeChecked = Array.from(document.querySelectorAll('input[name="f-size"]:checked')).map(i=>i.value);
   if (sizeChecked.length) list = list.filter(p => p.size && p.size.some(sz => sizeChecked.includes(sz)));
@@ -1988,6 +2008,8 @@ function buildFilterSidebar() {
   const patternCounts = {};
   const sizeCounts = {};
   const colorCounts = {};
+  const groupCounts = {}; // Product Group — only populated at all if the
+                           // backend actually sent this restricted field
   inCat.forEach(p => {
     // A product with multiple values (e.g. color "Blue & White") counts
     // toward EVERY value listed, so it's findable under either one.
@@ -1996,6 +2018,7 @@ function buildFilterSidebar() {
     (p.pattern || []).forEach(pt => { patternCounts[pt] = (patternCounts[pt] || 0) + 1; });
     (p.size || []).forEach(sz => { sizeCounts[sz] = (sizeCounts[sz] || 0) + 1; });
     (p.color || []).forEach(c => { colorCounts[c] = (colorCounts[c] || 0) + 1; });
+    if (p.product_group) groupCounts[p.product_group] = (groupCounts[p.product_group] || 0) + 1;
   });
 
   // Remember which options were checked before re-render, for every group —
@@ -2028,6 +2051,22 @@ function buildFilterSidebar() {
         .join('');
   } else {
     patternGroup.style.display = 'none';
+  }
+
+  // Show Product Group filter ONLY if the backend actually sent this data —
+  // which it only does for Rajul/Vishal/Neelam (enforced in Code.gs). For
+  // anyone else, groupCounts is always empty, so this stays hidden — no
+  // separate permission check needed on the frontend.
+  var checkedGroups = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(function(i){return i.value;});
+  const groupGroup = document.getElementById('group-filter-group');
+  if (Object.keys(groupCounts).length > 0) {
+    groupGroup.style.display = 'block';
+    document.getElementById('filter-groups').innerHTML =
+      Object.entries(groupCounts).sort((a,b)=>a[0].localeCompare(b[0]))
+        .map(([g,c]) => `<label class="fopt"><input type="checkbox" name="f-group" value="${g}" ${checkedGroups.indexOf(g)!==-1?'checked':''} onchange="renderProducts()"> ${g}<span class="fopt-count">${c}</span></label>`)
+        .join('');
+  } else {
+    groupGroup.style.display = 'none';
   }
 
   // Show Size filter ONLY if sheet has size data — alphabetical (A-Z)
@@ -2233,6 +2272,9 @@ function renderActiveFilters() {
   });
   document.querySelectorAll('input[name="f-pattern"]:checked').forEach(cb => {
     chips.push({type:'pattern', value:cb.value, label:cb.value, el:cb});
+  });
+  document.querySelectorAll('input[name="f-group"]:checked').forEach(cb => {
+    chips.push({type:'group', value:cb.value, label:'Group ' + cb.value, el:cb});
   });
   document.querySelectorAll('input[name="f-size"]:checked').forEach(cb => {
     chips.push({type:'size', value:cb.value, label:cb.value, el:cb});
@@ -2555,7 +2597,8 @@ async function exportCatalogLookbook(perPage) {
     + '<div class="lb-cover-content">'
     + '<div class="lb-eyebrow">Wholesale Product Catalog</div>'
     + '<div class="lb-emblem"><div class="lb-emblem-inner">&#8982;</div></div>'
-    + '<div class="lb-brand-name">The Tie Hub</div>'
+    + '<img src="' + LOGO_URL + '" alt="The Tie Hub" class="lb-logo-img" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'">'
+    + '<div class="lb-brand-name" style="display:none">The Tie Hub</div>'
     + '<div class="lb-brand-sub">By Big Five Inc. &middot; B2B Wholesale Only</div>'
     + '<div class="lb-divider"></div>'
     + '<div class="lb-cat-name">' + catName + '</div>'
@@ -2563,7 +2606,7 @@ async function exportCatalogLookbook(perPage) {
     + '</div>'
     + '<div class="lb-cover-footer">'
     + '<div class="lb-strong">For Authorised Retailers &amp; Wholesale Buyers Only</div>'
-    + '<div>Mumbai, Maharashtra &middot; GSTIN 27AYNPK2735R1ZM &middot; Ph 26130975</div>'
+    + '<div>Mumbai, Maharashtra &middot; GSTIN 27AYNPK2735R1ZM &middot; Ph 9137284461</div>'
     + '</div></div>';
 
   // ---- Closing page — mirrors the cover's frame treatment, closes the catalog with ordering info ----
@@ -2575,8 +2618,8 @@ async function exportCatalogLookbook(perPage) {
     + '<div class="lb-divider"></div>'
     + '<div class="lb-back-note">To place an order or request further details on any<br>product in this catalog, please reach out to us directly.</div>'
     + '<div class="lb-back-contact">'
-    + '<div class="lb-back-contact-row"><span class="lb-spec-lbl">Phone</span>26130975</div>'
-    + '<div class="lb-back-contact-row"><span class="lb-spec-lbl">Email</span>orders@thetiehub.com</div>'
+    + '<div class="lb-back-contact-row"><span class="lb-spec-lbl">Phone</span>9137284461</div>'
+    + '<div class="lb-back-contact-row"><span class="lb-spec-lbl">Email</span>inquiry@thetiehub.com</div>'
     + '<div class="lb-back-contact-row"><span class="lb-spec-lbl">Address</span>Mumbai, Maharashtra</div>'
     + '</div>'
     + '</div>'
@@ -2632,6 +2675,7 @@ async function exportCatalogLookbook(perPage) {
     + '.lb-emblem{width:54px;height:54px;border:1px solid #C7A653;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:18px}'
     + '.lb-emblem-inner{font-size:20pt;color:#8B6F1F;font-family:"Playfair Display",serif}'
     + '.lb-brand-name{font-family:"Playfair Display",serif;font-size:32pt;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#1A1612;line-height:1.05}'
+    + '.lb-logo-img{height:60px;width:auto;display:block;margin:0 auto}'
     + '.lb-brand-sub{font-family:"Inter",sans-serif;font-size:7pt;letter-spacing:0.3em;text-transform:uppercase;color:#7A6E5C;margin-top:10px}'
     + '.lb-divider{width:44px;height:1px;background:#C7A653;margin:22px 0}'
     + '.lb-cat-name{font-family:"DM Serif Display",serif;font-size:17pt;color:#8B6F1F;font-style:italic;margin-bottom:7px}'
@@ -2880,7 +2924,7 @@ function exportCatalogPDF(perPage) {
     + '</style></head><body>'
     + '<div id="loadmsg">Loading images… the print dialog opens automatically when ready. Please wait.</div>'
     + '<div class="hd"><div><div class="brand">The Tie Hub</div><div class="brand-sub">By Big Five Inc. &middot; B2B Wholesale</div></div>'
-    + '<div class="doc-r"><span class="lbl">Product List</span><br>Date: '+today+'<br>Ph: 26130975<br>GSTIN: 27AYNPK2735R1ZM</div></div>'
+    + '<div class="doc-r"><span class="lbl">Product List</span><br>Date: '+today+'<br>Ph: 9137284461<br>GSTIN: 27AYNPK2735R1ZM</div></div>'
     + '<div class="title-row"><div class="cat-title">'+catName+'</div>'
     + (filterDesc.length ? '<div class="filters">Filters applied: '+filterDesc.join('  &middot;  ')+'</div>' : '')
     + '</div>'
@@ -3423,7 +3467,7 @@ function generatePO() {
           Ground Floor, B-1, Amrit Niwas, B Wing<br>
           15 Sarojini Road, Vile Parle West<br>
           Mumbai - 400056, Maharashtra, India<br>
-          Ph: 26130975 &nbsp;|&nbsp; GSTIN: 27AYNPK2735R1ZM
+          Ph: 9137284461 &nbsp;|&nbsp; GSTIN: 27AYNPK2735R1ZM
         </div>
       </div>
       <div class="po-doc-info">
@@ -3509,7 +3553,7 @@ function exportExcel() {
   const poRows = [
     ['THE TIE HUB - PURCHASE ORDER'],
     ['Big Five Inc. | Ground Floor, B-1, Amrit Niwas, B Wing, 15 Sarojini Road, Vile Parle West, Mumbai 400056'],
-    ['GSTIN: 27AYNPK2735R1ZM | Ph: 26130975'],
+    ['GSTIN: 27AYNPK2735R1ZM | Ph: 9137284461'],
     [],
     ['PO Number', d.poNum, '', 'Date', d.date],
     ['Customer PO#', d.poRef || '-', '', 'Due Date', d.dueDate || 'On Delivery'],
@@ -3695,6 +3739,10 @@ function closeConfirm() { document.getElementById('confirm-over').classList.remo
 // Example: 'https://script.google.com/macros/s/AKfy.../exec'
 var BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwE5r4a-EkfU6yvJqJn6ma3bKn9IycXVTg9HFwXdZMWhSscCLmOmvrRkFfQT4Tqz0lWEA/exec';
 var BACKEND_TOKEN = 'TTH-2026-Mumbai-K9pQ7xR2vN5wL8mF';
+// Absolute URL — needed because Lookbook/Invoice content is written into a
+// separate popup window (window.open + document.write), where a relative
+// "images/logo.png" path wouldn't resolve to this site at all.
+var LOGO_URL = 'https://thetiehub.github.io/tiehub-catalog/images/logo.png';
 // ===== PER-CUSTOMER LOGIN =====
 var LOGGED_IN_PROFILE = null; // stores profile after successful login
 
@@ -3725,6 +3773,7 @@ function doLogin() {
       ls.style.opacity = '0'; ls.style.transition = 'opacity 0.4s';
       setTimeout(function(){ ls.style.display = 'none'; }, 400);
       showEmpDashboard(data.profile);
+      refreshProductsForEmployee(); // pick up the restricted Product Group attribute, if this person is allowed to see it
     } else {
       // Try customer login
       var custUrl = BACKEND_URL + '?action=login&login_id=' + encodeURIComponent(user)
@@ -3812,6 +3861,7 @@ function doEmpLogin(user, pwd) {
       ls.style.opacity = '0'; ls.style.transition = 'opacity 0.4s';
       setTimeout(function(){ ls.style.display = 'none'; }, 400);
       showEmpDashboard(data.profile);
+      refreshProductsForEmployee(); // pick up the restricted Product Group attribute, if this person is allowed to see it
     } else {
       errEl.textContent = data.error || 'Invalid username or password.';
       errEl.style.display = 'block';
@@ -4426,7 +4476,20 @@ function renderVisits() {
   var isManager = EMP_PROFILE && EMP_PROFILE.role === 'manager';
 
   var rows = visits.map(function(v){
-    var dateStr = v.ts ? v.ts.split(' ')[0] : '—';
+    // v.ts is normally "yyyy-MM-dd HH:mm:ss" already, so split(' ')[0] gives
+    // the date directly. If old/corrupted sheet data instead gives a stray
+    // JS Date.toString() ("Sat Jun 27 2026..."), split(' ')[0] would wrongly
+    // be just "Sat" — detect and reformat that case properly.
+    var dateStr = '—';
+    if (v.ts) {
+      var rawFirstPart = v.ts.split(' ')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(rawFirstPart)) {
+        dateStr = rawFirstPart;
+      } else {
+        var parsedTs = new Date(v.ts);
+        dateStr = isNaN(parsedTs.getTime()) ? rawFirstPart : parsedTs.toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'});
+      }
+    }
     var stClass = visitStatusClass(v.status);
     var isInquiry = v.entry_type === 'inquiry';
     var slaBreached = isInquiry && v.status === 'New Enquiry' && v.ts && (Date.now() - new Date(v.ts.replace(' ', 'T'))) > 2 * 60 * 60 * 1000;
@@ -4721,7 +4784,13 @@ function markInquiryCancelled(visitId) {
 // follow-up date highlight, which only looks at the NEXT planned contact.
 function formatLastUpdated_(ts) {
   if (!ts) return '';
-  var then = new Date(String(ts).replace(' ', 'T'));
+  var raw = String(ts).trim();
+  // Try the clean "yyyy-MM-dd HH:mm:ss" format first (the normal case).
+  var then = new Date(raw.replace(' ', 'T'));
+  // Safety net: if that didn't parse, it might be a stray Date object's
+  // toString() ("Sat Jun 27 2026 00:00:00 GMT+0530...") slipping through
+  // from old/corrupted sheet data — JS can actually parse that directly.
+  if (isNaN(then.getTime())) then = new Date(raw);
   if (isNaN(then.getTime())) return '';
   var diffMs = Date.now() - then.getTime();
   var diffHrs = diffMs / (1000 * 60 * 60);
@@ -5585,6 +5654,7 @@ function openInvoiceWindow(meta, items, inv) {
     + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Inter",sans-serif;color:#2A2520;background:#fff;padding:18px 22px;font-size:9pt}'
     + '.inv-hdr{display:grid;grid-template-columns:1fr 1fr;gap:1rem;border-bottom:2px solid #8B6F1F;padding-bottom:12px;margin-bottom:12px}'
     + '.brand-name{font-family:"Playfair Display",serif;font-size:20pt;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#1A1612}'
+    + '.inv-logo-img{height:38px;width:auto;display:block;margin-bottom:4px}'
     + '.brand-sub{font-size:6.5pt;letter-spacing:0.3em;text-transform:uppercase;color:#8B6F1F;margin-top:2px}'
     + '.brand-addr{font-size:7.5pt;color:#5A5040;margin-top:6px;line-height:1.6}'
     + '.inv-info{text-align:right}.inv-title{font-family:"Playfair Display",serif;font-size:15pt;color:#1A1612}'
@@ -5614,8 +5684,8 @@ function openInvoiceWindow(meta, items, inv) {
     + '<button onclick="window.close()" style="background:none;border:1px solid #ccc;padding:8px 12px;font-family:Inter,sans-serif;font-size:8pt;cursor:pointer">Close</button>'
     + '</div>'
     + '<div class="inv-hdr">'
-    + '<div><div class="brand-name">The Tie Hub</div><div class="brand-sub">By Big Five Inc.</div>'
-    + '<div class="brand-addr">Ground Floor, B-1, Amrit Niwas, B Wing<br>15 Sarojini Road, Vile Parle West, Mumbai - 400056<br>GSTIN: 27AYNPK2735R1ZM &nbsp;&#183;&nbsp; Ph: 26130975<br>Email: dme@thetiehub.com</div></div>'
+    + '<div><img src="' + LOGO_URL + '" alt="The Tie Hub" class="inv-logo-img" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'"><div class="brand-name" style="display:none">The Tie Hub</div><div class="brand-sub">By Big Five Inc.</div>'
+    + '<div class="brand-addr">Ground Floor, B-1, Amrit Niwas, B Wing<br>15 Sarojini Road, Vile Parle West, Mumbai - 400056<br>GSTIN: 27AYNPK2735R1ZM &nbsp;&#183;&nbsp; Ph: 9137284461<br>Email: dme@thetiehub.com</div></div>'
     + '<div class="inv-info"><div class="inv-title">TAX INVOICE</div>'
     + '<div class="inv-num">'+inv+'</div>'
     + '<div class="inv-meta">Date: '+date+'<br>PO No: '+meta.po+'<br>Confirmed by: '+(meta.confBy||'\u2014')+'</div></div>'
@@ -5647,7 +5717,7 @@ function openInvoiceWindow(meta, items, inv) {
     + '<div class="sbox"><div class="sline">Authorised Signatory<br>The Tie Hub</div></div>'
     + '</div>'
     + '<div class="foot">The Tie Hub &nbsp;&#183;&nbsp; By Big Five Inc. &nbsp;&#183;&nbsp; 15 Sarojini Road, Vile Parle West, Mumbai 400056<br>'
-    + 'GSTIN: 27AYNPK2735R1ZM &nbsp;&#183;&nbsp; dme@thetiehub.com &nbsp;&#183;&nbsp; 26130975<br>Computer generated invoice.</div>'
+    + 'GSTIN: 27AYNPK2735R1ZM &nbsp;&#183;&nbsp; dme@thetiehub.com &nbsp;&#183;&nbsp; 9137284461<br>Computer generated invoice.</div>'
     + '</body></html>';
   win.document.write(html);
   win.document.close();
@@ -5832,6 +5902,9 @@ function loadOrderHistory(gstin) {
     var ls = document.getElementById('login-screen');
     if (ls) ls.style.display = 'none';
     showEmpDashboard(empProfile);
+    // No separate product refresh needed here — checkAuth runs before
+    // loadDataFromBackend's DOMContentLoaded handler, so EMP_PROFILE is
+    // already set by the time that fetch fires and picks this up itself.
     return;
   }
   // Customer session — only if no employee session
@@ -6002,9 +6075,14 @@ function loadDataFromBackend() {
     return;
   }
 
-  // Load products and customers in parallel
+  // Load products and customers in parallel. If a session was already
+  // restored (checkAuth runs synchronously before this DOMContentLoaded
+  // handler fires), EMP_PROFILE is already known — include it now so the
+  // restricted Product Group attribute can come through on the very first
+  // load instead of needing a second catch-up fetch.
+  var empNameParam = (EMP_PROFILE && EMP_PROFILE.name) ? '&emp_name=' + encodeURIComponent(EMP_PROFILE.name) : '';
   Promise.all([
-    fetch(BACKEND_URL + '?action=products&t=' + encodeURIComponent(BACKEND_TOKEN) + '&_cid=' + encodeURIComponent(getClientId())).then(function(r){ return r.json(); }),
+    fetch(BACKEND_URL + '?action=products&t=' + encodeURIComponent(BACKEND_TOKEN) + empNameParam + '&_cid=' + encodeURIComponent(getClientId())).then(function(r){ return r.json(); }),
     fetch(BACKEND_URL + '?action=customers&t=' + encodeURIComponent(BACKEND_TOKEN) + '&_cid=' + encodeURIComponent(getClientId())).then(function(r){ return r.json(); })
   ]).then(function(results) {
     var products = results[0] || [];
@@ -6036,6 +6114,28 @@ function loadDataFromBackend() {
     console.error('Failed to load data from backend:', err);
     document.getElementById('cats-grid').innerHTML = '<div style="padding:2rem;text-align:center;color:#999">Could not load products. Please refresh the page.</div>';
   });
+}
+
+// Re-fetches products WITH the now-known employee name attached, so the
+// backend can decide whether to include the restricted Product Group
+// attribute. This runs right after login (or session restore) — at the
+// very first page load, before anyone's logged in, EMP_PROFILE doesn't
+// exist yet, so that initial fetch never carries this data even for
+// allowed staff. This is the catch-up call that fixes that.
+function refreshProductsForEmployee() {
+  if (!EMP_PROFILE || !EMP_PROFILE.name) return;
+  fetch(BACKEND_URL + '?action=products&t=' + encodeURIComponent(BACKEND_TOKEN)
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE.name)
+    + '&_cid=' + encodeURIComponent(getClientId()))
+    .then(function(r){ return r.json(); })
+    .then(function(products){
+      if (!products || !products.length) return;
+      PRODUCTS = products;
+      rebuildCatsMeta();
+      if (typeof buildFilterSidebar === 'function') buildFilterSidebar();
+      if (typeof renderProducts === 'function') renderProducts();
+    })
+    .catch(function(){ /* non-critical — first load already has the rest of the catalog */ });
 }
 
 // Rebuild CATS_META from the loaded PRODUCTS
