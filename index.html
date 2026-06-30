@@ -4448,7 +4448,14 @@ function renderVisits() {
     }
     var details = detailsBits.join(' · ') || '—';
 
-    var remarksHTML = v.remarks ? '<div style="white-space:pre-line;font-size:0.78rem;margin-top:3px">' + v.remarks + '</div>' : '';
+    // Show only the most recent 2 remark entries in the table — full
+    // history still lives in the sheet, this is just to keep rows scannable.
+    var remarksLines = v.remarks ? v.remarks.split('\n').filter(Boolean) : [];
+    var recentRemarks = remarksLines.slice(-2);
+    var remarksHTML = recentRemarks.length
+      ? '<div style="white-space:pre-line;font-size:0.78rem;margin-top:3px">' + recentRemarks.join('\n') + '</div>'
+        + (remarksLines.length > 2 ? '<div style="font-size:0.62rem;color:var(--muted);margin-top:2px;font-style:italic">+' + (remarksLines.length - 2) + ' earlier update' + (remarksLines.length - 2 > 1 ? 's' : '') + '</div>' : '')
+      : '';
     var remarksOrDetails = isInquiry
       ? (v.product_interest || '<em style="color:var(--muted)">—</em>') + remarksHTML
       : ('<em style="color:var(--muted)">' + (v.remarks ? '' : 'No remarks') + '</em>') + remarksHTML;
@@ -4462,6 +4469,11 @@ function renderVisits() {
     if (v.dispatch_status) {
       amtCell += '<div style="font-size:0.65rem;color:var(--muted)">' + v.dispatch_status + '</div>';
     }
+
+    // A row is "overdue" if it has a follow-up date in the past and hasn't
+    // been closed/cancelled yet — these need contacting FIRST, so the whole
+    // row gets a strong highlight, not just a colored date in one cell.
+    var isOverdueRow = v.next_followup_date && v.next_followup_date < todayStr && TERMINAL_STATUSES.indexOf(v.status) === -1;
 
     // Follow-up date cell — collapsed by default, opens a date picker only on click
     var fuCell;
@@ -4515,8 +4527,10 @@ function renderVisits() {
       actionsHTML = statusSelect2 + '<button class="oc-btn danger" onclick="discardVisit(\'' + v.visit_id + '\')">✕</button>';
     }
 
-    return '<tr>'
-      + '<td>' + (v.shop || v.gstin || 'Customer') + inqBadge + slaBadge + '<div style="font-size:0.68rem;color:var(--muted);margin-top:2px">' + dateStr + ' · assigned to ' + (v.emp_name||'') + '</div></td>'
+    var overdueBadge = isOverdueRow ? '<span style="background:#C0392B;color:#fff;font-family:var(--f-ui);font-size:0.52rem;letter-spacing:0.08em;text-transform:uppercase;padding:2px 6px;margin-left:6px;border-radius:2px;white-space:nowrap">⏰ Contact First</span>' : '';
+
+    return '<tr' + (isOverdueRow ? ' style="background:#FBEAEA !important;border-left:3px solid #C0392B"' : '') + '>'
+      + '<td>' + (v.shop || v.gstin || 'Customer') + inqBadge + slaBadge + overdueBadge + '<div style="font-size:0.68rem;color:var(--muted);margin-top:2px">' + dateStr + ' · assigned to ' + (v.emp_name||'') + '</div></td>'
       + '<td>' + details + '</td>'
       + '<td style="max-width:240px">' + remarksOrDetails + '</td>'
       + '<td class="num">' + amtCell + '</td>'
