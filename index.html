@@ -4232,6 +4232,16 @@ function exportOrderPDF(po) {
       + '<div class="no-print" style="text-align:center;margin-top:24px">'
       + '<button onclick="window.print()" style="background:#8B6F1F;color:#fff;border:none;padding:10px 28px;font-size:13px;cursor:pointer;letter-spacing:0.1em">⬇ Download / Print PDF</button>'
       + '</div>'
+      + '<script>'
+      + 'document.querySelectorAll(\'td img\').forEach(function(img){'
+      + '  img.onerror=function(){'
+      + '    var ph=document.createElement(\'div\');'
+      + '    ph.style.cssText=\'width:55px;height:55px;background:#F5F0E8;border:1px solid #DDD;display:flex;align-items:center;justify-content:center;font-size:8px;color:#AAA;text-align:center;\';'
+      + '    ph.textContent=\'No Image\';'
+      + '    this.parentNode.replaceChild(ph,this);'
+      + '  };'
+      + '});'
+      + '<\/script>'
       + '</body></html>';
 
     win.document.write(html);
