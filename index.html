@@ -3178,7 +3178,7 @@ function renderPanel() {
   html += keys.map(sku => {
     const p=PRODUCTS.find(x=>x.sku===sku); if(!p) return '';
     const qty=cart[sku]; totalQty+=qty; totalAmt+=p.mrp*qty;
-    const imgHTML = p.img ? `<img src="${p.img}" alt="${sku}" loading="lazy" onerror="this.style.display='none'">` : '';
+    const imgHTML = p.img ? `<img src="${p.img}" alt="${sku}" loading="lazy">` : '';
     return `<div class="oi">
       <div class="oi-img">${imgHTML}</div>
       <div class="oi-info">
@@ -3425,7 +3425,10 @@ function generatePO() {
     totalQty    += qty;
 
     rows += `<tr>
-      <td class="po-sku">${sku}</td>
+      <td style="vertical-align:middle">
+        ${p.img ? `<img src="${p.img}" style="width:52px;height:52px;object-fit:contain;border:1px solid #EEE;border-radius:2px;display:block;margin-bottom:4px">` : ''}
+        <span class="po-sku">${sku}</span>
+      </td>
       <td>${p.cat}</td>
       <td class="num" style="text-align:center">${qty}</td>
       <td class="num">Rs ${p.mrp.toLocaleString('en-IN')}</td>
@@ -4101,7 +4104,7 @@ function renderEmpOrders() {
       + '<div class="oc-po">' + o.po + '</div>'
       + '<div class="oc-shop">' + o.shop + '</div>'
       + '<div class="oc-meta">' + dateStr + ' &nbsp;·&nbsp; ' + o.qty + ' pcs &nbsp;·&nbsp; ' + o.skus + ' SKUs &nbsp;·&nbsp; ' + o.payment + '</div>'
-      + '<div class="oc-actions">' + (actions ? actions : '') + '<button class="oc-btn" onclick="exportOrderExcel(\'' + o.po + '\')">⬇ Excel</button></div>'
+      + '<div class="oc-actions">' + (actions ? actions : '') + '<button class="oc-btn" onclick="exportOrderPDF(\'' + o.po + '\')">⬇ PDF</button><button class="oc-btn" onclick="exportOrderExcel(\'' + o.po + '\')">⬇ Excel</button></div>'
       + '</div>'
       + '<div style="text-align:right">'
       + '<div class="oc-total">Rs ' + (o.total||0).toLocaleString('en-IN') + '</div>'
@@ -4110,6 +4113,130 @@ function renderEmpOrders() {
       + '</div>'
       + '</div>';
   }).join('');
+}
+
+function exportOrderPDF(po) {
+  var win = window.open('', '_blank');
+  if (!win) { alert('Please allow pop-ups for this site and try again.'); return; }
+
+  var url = BACKEND_URL + '?action=get_order_invoice'
+    + '&po=' + encodeURIComponent(po)
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN);
+
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) { win.close(); alert('Could not load order: ' + (data.error || '')); return; }
+    var m = data.meta, items = data.items || [];
+
+    var rows = items.map(function(it){
+      // Look up the product image from the already-loaded catalog
+      var prod = PRODUCTS.find(function(p){ return p.sku === it.sku; });
+      var imgTag = (prod && prod.img)
+        ? '<img src="' + prod.img + '" style="width:55px;height:55px;object-fit:contain;border:1px solid #EEE;display:block;margin-bottom:3px">'
+        : '';
+      return '<tr>'
+        + '<td style="vertical-align:middle">' + imgTag + '<span style="font-family:monospace;font-size:9pt;font-weight:600;color:#8B6F1F">' + it.sku + '</span></td>'
+        + '<td style="font-size:9pt">' + it.cat + '</td>'
+        + '<td style="text-align:center;font-size:9pt">' + it.qty + '</td>'
+        + '<td style="text-align:right;font-size:9pt">Rs ' + it.mrp.toLocaleString('en-IN') + '</td>'
+        + '<td style="text-align:right;font-size:9pt">Rs ' + it.gross.toLocaleString('en-IN') + '</td>'
+        + '<td style="text-align:right;font-size:9pt;color:#888">' + (it.disc > 0 ? '-Rs ' + it.disc.toLocaleString('en-IN') : '-') + '</td>'
+        + '<td style="text-align:right;font-size:9pt;color:#3A7A3A">+' + it.gstPct + '%</td>'
+        + '<td style="text-align:right;font-size:9pt;color:#888">+Rs ' + it.gstAmt.toLocaleString('en-IN') + '</td>'
+        + '<td style="text-align:right;font-size:9pt;font-weight:600">Rs ' + it.total.toLocaleString('en-IN') + '</td>'
+        + '</tr>';
+    }).join('');
+
+    var totalQty = items.reduce(function(s,it){ return s + it.qty; }, 0);
+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PO ' + po + '</title>'
+      + '<style>'
+      + 'body{margin:0;padding:18mm 16mm;font-family:"Cormorant Garamond","Georgia",serif;color:#1A1612;background:#fff;font-size:10pt}'
+      + 'h1{font-family:"Playfair Display","Georgia",serif;font-size:22pt;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;margin:0 0 4px}'
+      + '.logo-img{height:40px;width:auto;margin-bottom:6px}'
+      + '.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:1px solid #C7A653;margin-bottom:14px}'
+      + '.sender-addr{font-size:8pt;color:#555;line-height:1.6;margin-top:4px}'
+      + '.doc-info{text-align:right}'
+      + '.doc-label{font-size:7pt;letter-spacing:0.3em;text-transform:uppercase;color:#8B6F1F}'
+      + '.doc-num{font-family:monospace;font-size:16pt;font-weight:700;color:#1A1612}'
+      + '.doc-meta{font-size:8pt;color:#555;margin-top:6px;line-height:1.7}'
+      + '.doc-meta span{font-size:7pt;letter-spacing:0.15em;text-transform:uppercase;color:#8B6F1F;display:inline-block;width:66px}'
+      + '.bill-section{margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #E5DCC8}'
+      + '.bill-section h3{font-size:7pt;letter-spacing:0.28em;text-transform:uppercase;color:#8B6F1F;margin:0 0 8px}'
+      + '.bill-grid{display:grid;grid-template-columns:130px 1fr;gap:4px 10px;font-size:9pt}'
+      + '.bill-lbl{font-size:7pt;letter-spacing:0.15em;text-transform:uppercase;color:#888;padding-top:1px}'
+      + '.bill-val{color:#1A1612;font-weight:500}'
+      + '.items-section h3{font-size:7pt;letter-spacing:0.28em;text-transform:uppercase;color:#8B6F1F;margin:0 0 8px}'
+      + 'table{width:100%;border-collapse:collapse}'
+      + 'th{font-size:7pt;letter-spacing:0.2em;text-transform:uppercase;color:#888;padding:6px 5px;border-bottom:1px solid #C7A653;font-weight:500;text-align:left}'
+      + 'th:last-child,td:last-child{text-align:right}'
+      + 'td{padding:7px 5px;border-bottom:1px solid #EEEAE0;vertical-align:middle}'
+      + 'tr:nth-child(even) td{background:#FDFBF7}'
+      + '.totals{margin-top:14px;display:flex;justify-content:flex-end}'
+      + '.totals-box{width:240px;font-size:9pt}'
+      + '.tot-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #E5DCC8}'
+      + '.tot-grand{display:flex;justify-content:space-between;padding:8px 0;font-size:12pt;font-weight:700;color:#1A1612;border-top:1px solid #C7A653;margin-top:4px}'
+      + '.terms{margin-top:18px;font-size:7.5pt;color:#666;line-height:1.7;border-top:1px solid #E5DCC8;padding-top:10px}'
+      + '.sign{display:flex;justify-content:space-between;margin-top:28px}'
+      + '.sign-box{width:46%;border-top:1px solid #1A1612;padding-top:8px;font-size:8pt;color:#555}'
+      + '@media print{body{padding:10mm 12mm}@page{size:A4;margin:0}.no-print{display:none}}'
+      + '</style></head><body>'
+
+      + '<div class="header">'
+      + '<div>'
+      + '<img src="' + LOGO_URL + '" class="logo-img">'
+      + '<h1 style="display:none">The Tie Hub</h1>'
+      + '<div class="sender-addr"><strong>Big Five Inc.</strong><br>Ground Floor, B-1, Amrit Niwas, B Wing<br>15 Sarojini Road, Vile Parle West, Mumbai - 400056<br>Ph: 9137284461 &nbsp;|&nbsp; GSTIN: 27AYNPK2735R1ZM</div>'
+      + '</div>'
+      + '<div class="doc-info">'
+      + '<div class="doc-label">Purchase Order</div>'
+      + '<div class="doc-num">' + po + '</div>'
+      + '<div class="doc-meta"><span>Date:</span> ' + m.ts + '<br><span>Payment:</span> ' + m.payment + '</div>'
+      + '</div>'
+      + '</div>'
+
+      + '<div class="bill-section"><h3>Bill To</h3>'
+      + '<div class="bill-grid">'
+      + '<div class="bill-lbl">Company / Shop</div><div class="bill-val">' + m.shop + '</div>'
+      + '<div class="bill-lbl">GSTIN</div><div class="bill-val">' + m.gstin + '</div>'
+      + '<div class="bill-lbl">Address</div><div class="bill-val">' + m.addr + '</div>'
+      + '<div class="bill-lbl">City / State</div><div class="bill-val">' + m.city + ', ' + m.state + '</div>'
+      + '</div></div>'
+
+      + '<div class="items-section"><h3>Order Items &nbsp;·&nbsp; ' + totalQty + ' Pieces &nbsp;·&nbsp; ' + items.length + ' SKUs</h3>'
+      + '<table><thead><tr>'
+      + '<th>SKU</th><th>Category</th><th style="text-align:center">Qty</th>'
+      + '<th style="text-align:right">MRP</th><th style="text-align:right">Gross</th>'
+      + '<th style="text-align:right">Discount</th><th style="text-align:right">GST%</th>'
+      + '<th style="text-align:right">GST Amt</th><th style="text-align:right">Net Total</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+
+      + '<div class="totals"><div class="totals-box">'
+      + '<div class="tot-row"><span>Subtotal (' + totalQty + ' pcs)</span><span>Rs ' + m.subtotal.toLocaleString('en-IN') + '</span></div>'
+      + (m.discount > 0 ? '<div class="tot-row" style="color:#C0392B"><span>Discount' + (m.discPct ? ' (' + m.discPct + '%)' : '') + '</span><span>- Rs ' + m.discount.toLocaleString('en-IN') + '</span></div>' : '')
+      + '<div class="tot-row" style="color:#3A7A3A"><span>GST</span><span>+ Rs ' + m.gst.toLocaleString('en-IN') + '</span></div>'
+      + '<div class="tot-grand"><span>Grand Total</span><span>Rs ' + m.grand.toLocaleString('en-IN') + '</span></div>'
+      + '</div></div>'
+
+      + '<div class="terms"><strong>Terms &amp; Conditions</strong><br>'
+      + '1. Goods once sold will not be taken back without prior written approval from The Tie Hub.<br>'
+      + '2. Payment as per agreed terms: <strong>' + m.payment + '</strong>. Delayed payments attract 2% interest per month.<br>'
+      + '3. Any shortages or damage claims must be reported within 48 hours of delivery.<br>'
+      + '4. Goods remain property of The Tie Hub until full payment is received.<br>'
+      + '5. All disputes subject to Mumbai jurisdiction only. E. &amp; O.E.</div>'
+
+      + '<div class="sign">'
+      + '<div class="sign-box">Authorised Signatory<br><strong>The Tie Hub — Big Five Inc.</strong><br><small>GSTIN: 27AYNPK2735R1ZM</small></div>'
+      + '<div class="sign-box">Customer Signature<br><strong>' + m.shop + '</strong></div>'
+      + '</div>'
+
+      + '<div class="no-print" style="text-align:center;margin-top:24px">'
+      + '<button onclick="window.print()" style="background:#8B6F1F;color:#fff;border:none;padding:10px 28px;font-size:13px;cursor:pointer;letter-spacing:0.1em">⬇ Download / Print PDF</button>'
+      + '</div>'
+      + '</body></html>';
+
+    win.document.write(html);
+    win.document.close();
+  }).catch(function(){ win.close(); alert('Connection error. Please try again.'); });
 }
 
 function exportOrderExcel(po) {
