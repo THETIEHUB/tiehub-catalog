@@ -4127,12 +4127,40 @@ function exportOrderPDF(po) {
     if (!data.ok) { win.close(); alert('Could not load order: ' + (data.error || '')); return; }
     var m = data.meta, items = data.items || [];
 
-    var rows = items.map(function(it){
-      // Look up the product image from the already-loaded catalog
+    // Convert each product image to a base64 data URI BEFORE building the PDF HTML.
+    // This embeds images directly into the HTML so:
+    //   1) No network requests happen at print time (images survive saving as PDF)
+    //   2) No webp/format issues in PDF viewers — canvas always outputs JPEG
+    //   3) No cross-origin blocking (images are fetched here, on the catalog origin)
+    function toBase64(url) {
+      return new Promise(function(resolve) {
+        if (!url) { resolve(''); return; }
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+          var canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || 80;
+          canvas.height = img.naturalHeight || 80;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          try { resolve(canvas.toDataURL('image/jpeg', 0.85)); }
+          catch(e) { resolve(''); } // tainted canvas (CORS) — skip image
+        };
+        img.onerror = function() { resolve(''); };
+        img.src = url;
+      });
+    }
+
+    var imagePromises = items.map(function(it) {
       var prod = PRODUCTS.find(function(p){ return p.sku === it.sku; });
-      var imgTag = (prod && prod.img)
-        ? '<img src="' + prod.img + '" style="width:55px;height:55px;object-fit:contain;border:1px solid #EEE;display:block;margin-bottom:3px">'
-        : '';
+      return toBase64(prod ? prod.img : '');
+    });
+
+    Promise.all(imagePromises).then(function(base64Images) {
+    var rows = items.map(function(it, idx){
+      var dataUri = base64Images[idx];
+      var imgTag = dataUri
+        ? '<img src="' + dataUri + '" style="width:55px;height:55px;object-fit:contain;border:1px solid #EEE;display:block;margin-bottom:3px">'
+        : '<div style="width:55px;height:55px;background:#F5F0E8;border:1px solid #DDD;display:flex;align-items:center;justify-content:center;font-size:7px;color:#AAA;text-align:center;margin-bottom:3px">No image</div>';
       return '<tr>'
         + '<td style="vertical-align:middle">' + imgTag + '<span style="font-family:monospace;font-size:9pt;font-weight:600;color:#8B6F1F">' + it.sku + '</span></td>'
         + '<td style="font-size:9pt">' + it.cat + '</td>'
@@ -4246,6 +4274,7 @@ function exportOrderPDF(po) {
 
     win.document.write(html);
     win.document.close();
+    }); // end Promise.all image pre-loading
   }).catch(function(){ win.close(); alert('Connection error. Please try again.'); });
 }
 
