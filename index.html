@@ -1896,10 +1896,10 @@ function getPriceRange(p) {
 function getFiltered() {
   const cats = getCatsForNav(activeCat);
   let list = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
-  // Never show a product that has no photo at all — these used to appear
-  // with a placeholder icon, but a wholesale buyer can't order what they
-  // can't see, so they're hidden from browsing entirely.
-  list = list.filter(p => p.img);
+  // Products with no image (empty string or #N/A formula error) are shown
+  // with a placeholder — hiding them entirely caused entire categories to
+  // disappear when image_url cells had formula errors in the sheet.
+  // The placeholder is shown at the card-render level instead.
   if (searchQ) {
     const q = searchQ.toLowerCase().replace(/[-_\s]/g, ''); // strip dashes/spaces for flexible match
     list = list.filter(p => {
@@ -1974,7 +1974,8 @@ function buildFilterSidebar() {
   // — since those are exactly what we're computing the option lists for.)
   const cats = getCatsForNav(activeCat);
   let inCat = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
-  inCat = inCat.filter(p => p.img);
+  // Don't filter by image here — products without images still appear in
+  // the catalog (with a placeholder), so they should count toward filter options.
 
   if (searchQ) {
     const q = searchQ.toLowerCase().replace(/[-_\s]/g, '');
@@ -2337,8 +2338,8 @@ function cardHTML(p) {
   const safeSku = p.sku.replace(/'/g, "\\'");
   const safeImg = p.img ? p.img.replace(/'/g, "\\'") : '';
   const imgTag = p.img
-    ? `<img src="${p.img}" alt="${p.sku}" loading="lazy" onclick="openLightbox('${safeImg}','${safeSku}')" onerror="this.closest('.pcard').style.display='none'">`
-    : '';
+    ? `<img src="${p.img}" alt="${p.sku}" loading="lazy" onclick="openLightbox('${safeImg}','${safeSku}')" onerror="this.outerHTML='<div class=\'noimg\' style=\'height:100%;display:flex;align-items:center;justify-content:center;color:#C2B58F;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase\'>No Image</div>'">`
+    : '<div class="noimg" style="height:100%;display:flex;align-items:center;justify-content:center;color:#C2B58F;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase">No Image</div>';
   const phStyle = p.img ? 'style="display:none"' : '';
   const action = oos ? `<span class="oos-lbl">Out of Stock</span>`
     : qty === 0 ? `<button class="add-btn" onclick="addItem('${p.sku}')">+ Add</button>`
