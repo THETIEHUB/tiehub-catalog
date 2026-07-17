@@ -1048,6 +1048,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <option value="price-desc">Price ↓</option>
       <option value="stock-desc">Stock ↓</option>
       <option value="sku">SKU A–Z</option>
+      <option value="saleprice-asc">Sale Price ↑</option>
     </select>
     <span class="flbl">Min Stock:</span>
     <select class="fsel" id="stock-sel" onchange="renderProducts()">
@@ -1175,6 +1176,16 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
           <span>Product Group</span><span class="fg-arrow">−</span>
         </div>
         <div class="fg-body" id="filter-groups"></div>
+      </div>
+
+      <!-- SALE PRICE — same restricted attribute as Product Group. Only
+           present in the data at all for Rajul/Vishal/Neelam, so this stays
+           hidden automatically for anyone else. -->
+      <div class="filter-group" id="saleprice-filter-group" style="display:none">
+        <div class="fg-head" onclick="toggleFilterGroup(this)">
+          <span>Sale Price</span><span class="fg-arrow">−</span>
+        </div>
+        <div class="fg-body" id="filter-saleprice"></div>
       </div>
 
       <!-- SIZE (requires sheet column) -->
@@ -1964,6 +1975,10 @@ function getFiltered() {
   const grpChecked = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(i=>i.value);
   if (grpChecked.length) list = list.filter(p => p.product_group && grpChecked.includes(p.product_group));
 
+  // On Sale filter — same restricted attribute as Product Group.
+  const onSaleChecked = document.querySelector('input[name="f-onsale"]') ? document.querySelector('input[name="f-onsale"]').checked : false;
+  if (onSaleChecked) list = list.filter(p => p.sale_price !== undefined && p.sale_price !== null);
+
   // Size filter (only works if sheet has 'size' column)
   const sizeChecked = Array.from(document.querySelectorAll('input[name="f-size"]:checked')).map(i=>i.value);
   if (sizeChecked.length) list = list.filter(p => p.size && p.size.some(sz => sizeChecked.includes(sz)));
@@ -1979,6 +1994,15 @@ function getFiltered() {
   else if (sort === 'price-desc' || sort === 'default') list = [...list].sort((a,b)=>b.mrp-a.mrp);
   else if (sort === 'stock-desc') list = [...list].sort((a,b)=>b.stock-a.stock);
   else if (sort === 'sku') list = [...list].sort((a,b)=>a.sku.localeCompare(b.sku));
+  else if (sort === 'saleprice-asc') {
+    // Restricted attribute — only meaningful for staff who can see sale_price.
+    // Items without a sale price sort to the end rather than the top.
+    list = [...list].sort((a,b)=>{
+      var av = (a.sale_price !== undefined && a.sale_price !== null) ? a.sale_price : Infinity;
+      var bv = (b.sale_price !== undefined && b.sale_price !== null) ? b.sale_price : Infinity;
+      return av - bv;
+    });
+  }
   return list;
 }
 
@@ -2087,6 +2111,21 @@ function buildFilterSidebar() {
         .join('');
   } else {
     groupGroup.style.display = 'none';
+  }
+
+  // Show Sale Price filter ONLY if the backend actually sent this data —
+  // same restricted attribute as Product Group. A simple "On Sale" toggle
+  // instead of a range slider, since only a handful of products typically
+  // carry a sale price at any given time.
+  var onSaleCount = inCat.filter(function(p){ return p.sale_price !== undefined && p.sale_price !== null; }).length;
+  var checkedOnSale = document.querySelector('input[name="f-onsale"]') ? document.querySelector('input[name="f-onsale"]').checked : false;
+  const salePriceGroup = document.getElementById('saleprice-filter-group');
+  if (onSaleCount > 0) {
+    salePriceGroup.style.display = 'block';
+    document.getElementById('filter-saleprice').innerHTML =
+      `<label class="fopt"><input type="checkbox" name="f-onsale" ${checkedOnSale?'checked':''} onchange="renderProducts()"> On Sale<span class="fopt-count">${onSaleCount}</span></label>`;
+  } else {
+    salePriceGroup.style.display = 'none';
   }
 
   // Show Size filter ONLY if sheet has size data — alphabetical (A-Z)
@@ -2295,6 +2334,9 @@ function renderActiveFilters() {
   });
   document.querySelectorAll('input[name="f-group"]:checked').forEach(cb => {
     chips.push({type:'group', value:cb.value, label:'Group ' + cb.value, el:cb});
+  });
+  document.querySelectorAll('input[name="f-onsale"]:checked').forEach(cb => {
+    chips.push({type:'onsale', value:'on', label:'On Sale', el:cb});
   });
   document.querySelectorAll('input[name="f-size"]:checked').forEach(cb => {
     chips.push({type:'size', value:cb.value, label:cb.value, el:cb});
