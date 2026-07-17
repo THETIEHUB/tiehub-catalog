@@ -1373,7 +1373,23 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 
 <script>
 var PRODUCTS = [];  // Loaded from Google Sheet via backend on page load
-const NAV_MAP = {"Polos": ["TShirt"], "Neckties": ["Necktie"], "Bow Ties": ["Bow Ties"], "Pocket Square": ["Pocket Square"], "Cufflinks": ["Cufflinks"], "Gifting": ["Combo"], "Accessories": ["Metal Lapel Pin", "Caps", "Bright Socks", "Cravats", "Tie Pin", "Scarves", "Mask", "Suspender", "Belts", "Neckerchief", "Hats", "Women Scarves", "Buttons", "Wrist Band", "Handkerchief", "Sticker", "Loafer Socks", "Button Case", "Lapel Pin", "Boutonniere", "Rakhi", "Cummerbund", "Bags", "Hand Sleeves", "Magnetic Metal Pocket Brooch", "Pocket Square Holder", "Pocket Watch", "Tuxedo Button", "Shirt Tucker"]};
+const NAV_MAP = {
+  "Polos":         ["T-Shirt"],
+  "Neckties":      ["Neckties"],
+  "Bow Ties":      ["Bow ties"],
+  "Pocket Square": ["Pocket Square"],
+  "Cufflinks":     ["Cufflinks"],
+  "Gifting":       ["Combo"],
+  "Accessories":   [
+    "Metal Lapel Pins", "Caps", "Bright Socks", "Cravat", "Tie Pin",
+    "Scarves", "Mask", "Suspender", "Belt", "Neckerchief", "Hats",
+    "Women Scarves", "Buttons", "Wrist Band", "Handkerchief", "Sticker",
+    "Loafer Socks", "Button Case", "Lapel Pin", "Rakhi", "Cummerbund",
+    "Bags", "Hand Sleeves", "Magnetic Metal Pocket Brooch",
+    "Pocket Square Holder", "Pocket Watch", "Tuxedo Button",
+    "Customize 5-18", "Customize 18", "Customize 3"
+  ]
+};
 var CATS_META = [{"name":"Necktie","count":727,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-tth-2wp19nt-001-05.jpg"},{"name":"Combo","count":680,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/TTH-BMTP-007.jpg"},{"name":"Pocket Square","count":516,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-tth-3wp19ps-005.jpg"},{"name":"Cufflinks","count":420,"img":"https://www.thetiehub.com/wp-content/uploads/2025/04/1775-1.webp"},{"name":"Metal Lapel Pin","count":356,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/TTH-BCOM-008.jpg"},{"name":"Bow Ties","count":268,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/TTH-BKBT-001.jpg"},{"name":"Caps","count":183,"img":"https://www.thetiehub.com/wp-content/uploads/2025/05/TTH-CAP-001-2.jpg"},{"name":"Bright Socks","count":129,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-tth-bs-003-01_2_4.jpg"},{"name":"Cravats","count":101,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-tth-cra-013-1.jpg"},{"name":"Tie Pin","count":86,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/TTH-TB-030-1.jpg"},{"name":"Scarves","count":81,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/TTH-SCRF-035.jpg"},{"name":"Mask","count":79,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/TTH-2NPMSK-004.jpg"},{"name":"TShirt","count":78,"img":""},{"name":"Suspender","count":72,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-untitled_design_4_.png"},{"name":"Belts","count":64,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/tth-bl-001_2.jpg"},{"name":"Neckerchief","count":50,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/TTH-NKCHF-003.jpg"},{"name":"Hats","count":32,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-tth-htcp-001.jpg"},{"name":"Women Scarves","count":31,"img":"https://www.thetiehub.com/wp-content/uploads/2024/03/TTH-SCRFM-001-1.jpg"},{"name":"Buttons","count":27,"img":""},{"name":"Wrist Band","count":24,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-tth-brcl-046.jpg"},{"name":"Handkerchief","count":24,"img":"https://www.thetiehub.com/wp-content/uploads/2024/11/TTH-HC-063-1.jpg"},{"name":"Sticker","count":21,"img":""},{"name":"Loafer Socks","count":21,"img":"https://www.thetiehub.com/wp-content/uploads/2024/04/TTH-LS-205-1.jpg"},{"name":"Button Case","count":19,"img":"https://www.thetiehub.com/wp-content/uploads/2024/02/TPCS-001-1.jpg"},{"name":"Lapel Pin","count":19,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-tth-lp-067_1__3.jpg"},{"name":"Boutonniere","count":19,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/TTH-LP-174-1.jpg"},{"name":"Rakhi","count":14,"img":"https://www.thetiehub.com/wp-content/uploads/2023/08/51qUB2snBfL._AC_UY1100_.jpg"},{"name":"Cummerbund","count":10,"img":"https://www.thetiehub.com/wp-content/uploads/2024/07/KMBD.jpg"},{"name":"Bags","count":8,"img":"https://www.thetiehub.com/wp-content/uploads/2025/12/TTH-CAPBG-001-1.jpg"},{"name":"Hand Sleeves","count":8,"img":""},{"name":"Magnetic Metal Pocket Brooch","count":4,"img":"https://www.thetiehub.com/wp-content/uploads/2025/04/TTH-MTPS-001-1.jpg"},{"name":"Pocket Square Holder","count":4,"img":"https://www.thetiehub.com/wp-content/uploads/2024/01/SPNT-PAISLEY-7.jpg"},{"name":"Pocket Watch","count":4,"img":"https://www.thetiehub.com/wp-content/uploads/2025/04/TTH-PWC-003-1.jpg"},{"name":"Tuxedo Button","count":4,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-tuxedo_button_buttons_1_.jpg"},{"name":"Shirt Tucker","count":1,"img":"https://www.thetiehub.com/wp-content/uploads/2022/08/products-mens-thigh-shirt-stay-suspender-garters-keep-shirt-tucked-in-with-non-slip-locking-clamps.jpg"}];
 const EMOJI = {"Necktie": "👔", "Combo": "🎁", "Pocket Square": "🟦", "Cufflinks": "💎", "Metal Lapel Pin": "📌", "Bow Ties": "🎀", "Caps": "🧢", "Bright Socks": "🧦", "Cravats": "🎗️", "Tie Pin": "📎", "Scarves": "🧣", "Mask": "😷", "TShirt": "👕", "Suspender": "🎽", "Belts": "⚫", "Neckerchief": "🌿", "Hats": "🎩", "Women Scarves": "🌸", "Buttons": "⭕", "Wrist Band": "⌚", "Handkerchief": "🤍", "Sticker": "⭐", "Loafer Socks": "🧦", "Button Case": "📦", "Lapel Pin": "📌", "Boutonniere": "🌹", "Rakhi": "🪢", "Cummerbund": "🎽", "Bags": "👜", "Hand Sleeves": "🧤", "Magnetic Metal Pocket Brooch": "✨", "Pocket Square Holder": "🗂️", "Pocket Watch": "⌚", "Tuxedo Button": "🔘", "Shirt Tucker": "🔧"};
 
@@ -1398,11 +1414,11 @@ const CATEGORY_GST = {
   'Bags':                          18,
   'Pen Stand':                     18,
   'PU Belts':                      18,
-  'Belts':                         18,   // legacy alias for PU Belts
+  'Belt':                         18,   // legacy alias for PU Belts
 
   // 3% - Metal/imitation jewellery items (HSN 7117)
   'Cufflinks':                      3,
-  'Metal Lapel Pin':                3,
+  'Metal Lapel Pins':                3,
   'Lapel Pin':                      3,
   'Tie Pin':                        3,
   'Button Case':                    3,
@@ -6385,20 +6401,20 @@ function refreshProductsForEmployee() {
 // All files live in the /images/ folder in this same GitHub repo.
 const CATEGORY_IMAGES = {
   'Cufflinks':                     'images/cufflinks.jpg',
-  'Bow Ties':                      'images/bow-ties.jpeg', // file was deleted from repo — re-upload to restore
+  'Bow ties':                      'images/bow-ties.jpeg', // file was deleted from repo — re-upload to restore
   'PU Belts':                      'images/pu-belts.jpg',
-  'Belts':                         'images/pu-belts.jpg',   // alias
-  'Cravats':                       'images/cravats.jpg',
+  'Belt':                         'images/pu-belts.jpg',   // alias
+  'Cravat':                       'images/cravats.jpg',
   'Pocket Watch':                  'images/Pocket Watch.jpg',
   'Shirt Tucker':                  'images/Shirt Tucker.jpg',
-  'TShirt':                        'images/T-Shirt.jpg',
+  'T-Shirt':                        'images/T-Shirt.jpg',
   // Everything below is from your prepared batch — only add a line once
   // you've actually uploaded that file into /images/ on GitHub. Until then,
   // that category just falls back to a product photo, which is harmless.
-  'Necktie':                       'images/Necktie.png',
+  'Neckties':                       'images/Necktie.png',
   'Combo':                         'images/Combo.jpg',
   'Pocket Square':                 'images/Pocketsquare.png',
-  'Metal Lapel Pin':               'images/Metal Lapel Pin.jpg',
+  'Metal Lapel Pins':               'images/Metal Lapel Pin.jpg',
   'Caps':                          'images/Caps.png',
   'Bright Socks':                  'images/Bright Socks.jpg',
   'Tie Pin':                       'images/Tie Pin.png',
