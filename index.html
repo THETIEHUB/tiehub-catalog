@@ -2305,7 +2305,9 @@ function renderProducts() {
   document.getElementById('lmw').style.display = shown < total ? 'block' : 'none';
   renderActiveFilters();
   if (!total) {
-    document.getElementById('pgrid').innerHTML = `<div class="state-box">No products found</div>`;
+    document.getElementById('pgrid').innerHTML = PRODUCTS.length === 0
+      ? `<div class="state-box">Products not loaded yet. <button onclick="loadDataFromBackend()" style="margin-left:8px;background:#8B6F1F;color:#fff;border:none;padding:5px 12px;font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer">Reload</button></div>`
+      : `<div class="state-box">No products found — try adjusting your filters.</div>`;
     return;
   }
   document.getElementById('pgrid').innerHTML = filtered.slice(0, shown).map(cardHTML).join('');
@@ -6318,7 +6320,7 @@ function loadDataFromBackend() {
     if (typeof renderProducts === 'function') renderProducts();
   }).catch(function(err){
     console.error('Failed to load data from backend:', err);
-    document.getElementById('cats-grid').innerHTML = '<div style="padding:2rem;text-align:center;color:#999">Could not load products. Please refresh the page.</div>';
+    document.getElementById('cats-grid').innerHTML = '<div style="padding:2rem;text-align:center;color:#999">Could not load products. <button onclick="loadDataFromBackend()" style="margin-left:8px;background:#8B6F1F;color:#fff;border:none;padding:6px 14px;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer">Retry</button></div>';
   });
 }
 
