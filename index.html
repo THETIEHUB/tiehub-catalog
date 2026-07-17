@@ -6345,7 +6345,15 @@ function loadDataFromBackend() {
     if (typeof renderProducts === 'function') renderProducts();
   }).catch(function(err){
     console.error('Failed to load data from backend:', err);
-    document.getElementById('cats-grid').innerHTML = '<div style="padding:2rem;text-align:center;color:#999">Could not load products. <button onclick="loadDataFromBackend()" style="margin-left:8px;background:#8B6F1F;color:#fff;border:none;padding:6px 14px;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer">Retry</button></div>';
+    var retryBtn = '<button onclick="loadDataFromBackend()" style="margin-left:8px;background:#8B6F1F;color:#fff;border:none;padding:6px 14px;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer">Retry</button>';
+    var errMsg = '<div style="padding:2rem;text-align:center;color:#999">Could not load products.' + retryBtn + '</div>';
+    // Update whichever container is currently visible — on the home page
+    // that's cats-grid; on a category page that's pgrid. Always update
+    // both so the spinner never gets permanently stuck.
+    var cg = document.getElementById('cats-grid');
+    if (cg) cg.innerHTML = errMsg;
+    var pg = document.getElementById('pgrid');
+    if (pg) pg.innerHTML = '<div class="state-box">Could not load products.' + retryBtn + '</div>';
   });
 }
 
