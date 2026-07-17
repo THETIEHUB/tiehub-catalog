@@ -1912,10 +1912,9 @@ function getPriceRange(p) {
 function getFiltered() {
   const cats = getCatsForNav(activeCat);
   let list = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
-  // Products with no image (empty string or #N/A formula error) are shown
-  // with a placeholder — hiding them entirely caused entire categories to
-  // disappear when image_url cells had formula errors in the sheet.
-  // The placeholder is shown at the card-render level instead.
+  // Only show products that actually have a real photo — a wholesale
+  // buyer can't meaningfully evaluate or order something they can't see.
+  list = list.filter(p => p.img);
   if (searchQ) {
     const q = searchQ.toLowerCase().replace(/[-_\s]/g, ''); // strip dashes/spaces for flexible match
     list = list.filter(p => {
@@ -1990,8 +1989,9 @@ function buildFilterSidebar() {
   // — since those are exactly what we're computing the option lists for.)
   const cats = getCatsForNav(activeCat);
   let inCat = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
-  // Don't filter by image here — products without images still appear in
-  // the catalog (with a placeholder), so they should count toward filter options.
+  // Match getFiltered — only count products that actually have a photo,
+  // so filter option counts match what's actually shown in the grid.
+  inCat = inCat.filter(p => p.img);
 
   if (searchQ) {
     const q = searchQ.toLowerCase().replace(/[-_\s]/g, '');
@@ -2381,7 +2381,7 @@ function cardHTML(p) {
     <div class="pcard-body">
       <div class="pcard-sku">${p.sku}</div>
       <div class="pcard-cat">${p.cat}</div>
-      <div class="pcard-foot"><div><div class="pcard-price"><span class="pcard-price-cur">Rs</span>${p.mrp.toLocaleString('en-IN')}</div>${stockLine}</div>${action}</div>
+      <div class="pcard-foot"><div><div class="pcard-price"><span class="pcard-price-cur">Rs</span>${p.mrp.toLocaleString('en-IN')}</div>${(p.sale_price !== undefined && p.sale_price !== null) ? '<div style="font-size:0.65rem;color:#0F5132;font-weight:600;margin-top:2px">Sale: Rs '+p.sale_price.toLocaleString('en-IN')+'</div>' : ''}${stockLine}</div>${action}</div>
     </div>
   </div>`;
 }
