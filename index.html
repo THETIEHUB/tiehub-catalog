@@ -4442,6 +4442,14 @@ function renderEmpCustomers() {
     return;
   }
   document.getElementById('emp-customers-list').innerHTML = customers.map(function(c){
+    var hasCreds = c.login_id && c.pwd;
+    // Look up by GSTIN (unique per customer) rather than array index — the
+    // list rendered here may be a filtered subset (search/city/state), so
+    // its position doesn't match EMP_DATA.customers' original order.
+    var safeGstin = String(c.gstin || '').replace(/'/g, "\\'");
+    var sendBtn = hasCreds
+      ? '<button class="oc-btn" style="background:#25D366;color:#fff;border-color:#25D366;margin-top:6px" onclick="event.stopPropagation();sendWelcomeMessage(\'' + safeGstin + '\')">💬 Send Login</button>'
+      : '<span style="font-family:var(--f-ui);font-size:0.55rem;color:var(--muted2);display:block;margin-top:6px">No login set</span>';
     return '<div class="cust-card">'
       + '<div>'
       + '<div class="cc-name">' + c.name + '</div>'
@@ -4454,9 +4462,38 @@ function renderEmpCustomers() {
       + '<div style="text-align:right">'
       + '<div class="cc-disc">' + (c.disc ? c.disc + '% discount' : '') + '</div>'
       + (EMP_DATA.isManager ? '<div style="font-family:var(--f-ui);font-size:0.58rem;color:var(--muted2);margin-top:2px">' + (c.emp||'—') + '</div>' : '')
+      + sendBtn
       + '</div>'
       + '</div>';
   }).join('');
+}
+
+// Builds and opens the exact welcome-message template requested, with the
+// customer's real company name and credentials filled in, ready to send
+// over WhatsApp. If the customer has no phone number saved, falls back to
+// wa.me without a number so staff can still pick who to send it to.
+function sendWelcomeMessage(gstin) {
+  var customers = EMP_DATA.customers || [];
+  var c = customers.find(function(x){ return x.gstin === gstin; });
+  if (!c) return;
+  if (!c.login_id || !c.pwd) { alert('This customer has no login_id/password set yet in the Customers sheet.'); return; }
+
+  var msg = 'Hi ' + c.name + ' \ud83d\udc4b\n\n'
+    + 'Welcome to The Tie Hub B2B Wholesale Catalog!\n\n'
+    + '\ud83c\udf10 Catalog Link: https://thetiehub.github.io/tiehub-catalog/\n\n'
+    + '\ud83d\udd11 Your Login Details:\n'
+    + 'Username: ' + c.login_id + '\n'
+    + 'Password: ' + c.pwd + '\n\n'
+    + 'You can browse our full collection, check live stock, and place orders directly — anytime, anywhere.\n\n'
+    + 'For any help, call us on 9137284461.\n\n'
+    + '— The Tie Hub Team \ud83c\udf81';
+
+  var digits = String(c.phone || '').replace(/\D/g, '');
+  if (digits.length === 10) digits = '91' + digits;
+  var waUrl = digits
+    ? 'https://wa.me/' + digits + '?text=' + encodeURIComponent(msg)
+    : 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(waUrl, '_blank');
 }
 
 function filterCustomers() { renderEmpCustomers(); }
