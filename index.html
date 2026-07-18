@@ -4478,15 +4478,15 @@ function sendWelcomeMessage(gstin) {
   if (!c) return;
   if (!c.login_id || !c.pwd) { alert('This customer has no login_id/password set yet in the Customers sheet.'); return; }
 
-  var msg = 'Hi ' + c.name + ' \ud83d\udc4b\n\n'
+  var msg = 'Hi ' + c.name + ' 👋\n\n'
     + 'Welcome to The Tie Hub B2B Wholesale Catalog!\n\n'
-    + '\ud83c\udf10 Catalog Link: https://thetiehub.github.io/tiehub-catalog/\n\n'
-    + '\ud83d\udd11 Your Login Details:\n'
+    + '🌐 Catalog Link: https://thetiehub.github.io/tiehub-catalog/\n\n'
+    + '🔑 Your Login Details:\n'
     + 'Username: ' + c.login_id + '\n'
     + 'Password: ' + c.pwd + '\n\n'
     + 'You can browse our full collection, check live stock, and place orders directly — anytime, anywhere.\n\n'
     + 'For any help, call us on 9137284461.\n\n'
-    + '— The Tie Hub Team \ud83c\udf81';
+    + '— The Tie Hub Team 🎁';
 
   var digits = String(c.phone || '').replace(/\D/g, '');
   if (digits.length === 10) digits = '91' + digits;
