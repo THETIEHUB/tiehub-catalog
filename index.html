@@ -3885,10 +3885,48 @@ function doLogin() {
   });
 }
 
+// Approximate visit tracking: logs one session_start per genuinely new
+// login, then pings every 60s while the tab stays open so we can estimate
+// how long they stayed. A page refresh mid-session resumes the SAME
+// session (via sessionStorage) instead of counting as a second visit.
+var _heartbeatTimer = null;
+function startVisitTracking(profile) {
+  if (!profile || !profile.gstin) return;
+  var existingSessionId = '';
+  try { existingSessionId = sessionStorage.getItem('tth_session_id') || ''; } catch(e) {}
+
+  function beginHeartbeat(sessionId) {
+    if (_heartbeatTimer) clearInterval(_heartbeatTimer); // never double up on refresh
+    _heartbeatTimer = setInterval(function(){
+      fetch(BACKEND_URL + '?action=log_session_heartbeat&session_id=' + encodeURIComponent(sessionId)
+        + '&_t=' + encodeURIComponent(BACKEND_TOKEN)).catch(function(){});
+    }, 60000); // every 60 seconds while the tab is open
+  }
+
+  if (existingSessionId) {
+    // Resuming — this is a page reload within the same visit, not a new one
+    beginHeartbeat(existingSessionId);
+    return;
+  }
+
+  // Genuinely new visit — log it and start the heartbeat
+  fetch(BACKEND_URL + '?action=log_session_start&gstin=' + encodeURIComponent(profile.gstin)
+    + '&name=' + encodeURIComponent(profile.name || '')
+    + '&_t=' + encodeURIComponent(BACKEND_TOKEN))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.ok && data.session_id) {
+        try { sessionStorage.setItem('tth_session_id', data.session_id); } catch(e) {}
+        beginHeartbeat(data.session_id);
+      }
+    }).catch(function(){ /* non-critical — browsing still works without tracking */ });
+}
+
 function activateUserSession(profile) {
   // Just show the My Account button — no name display
   var btn = document.getElementById('acct-btn');
   if (btn) btn.style.display = 'flex';
+  startVisitTracking(profile); // logs this login + starts periodic heartbeats
   // Auto-fill order form fields
   if (profile.name)  { var el = document.getElementById('f-shop');  if (el) el.value = fixMojibake(profile.name); }
   if (profile.gstin) { var el = document.getElementById('f-gst');   if (el) el.value = profile.gstin; }
@@ -4462,10 +4500,29 @@ function renderEmpCustomers() {
       + '<div style="text-align:right">'
       + '<div class="cc-disc">' + (c.disc ? c.disc + '% discount' : '') + '</div>'
       + (EMP_DATA.isManager ? '<div style="font-family:var(--f-ui);font-size:0.58rem;color:var(--muted2);margin-top:2px">' + (c.emp||'—') + '</div>' : '')
+      + buildVisitStatsHTML_(c)
       + sendBtn
       + '</div>'
       + '</div>';
   }).join('');
+}
+
+// Renders how many times a customer has logged in, roughly how long
+// they've spent on the site in total, and when they last visited. Blank
+// (no line shown) if they've never actually logged in yet — nothing to
+// show is more honest than showing "0 visits" for someone who was just
+// added and hasn't logged in at all.
+function buildVisitStatsHTML_(c) {
+  if (!c.visits) return '';
+  var hours = Math.floor(c.totalMinutes / 60);
+  var mins = c.totalMinutes % 60;
+  var timeLabel = hours > 0 ? (hours + 'h ' + mins + 'm') : (mins + 'm');
+  var lastLabel = c.lastVisited ? c.lastVisited.split(' ')[0] : '';
+  return '<div style="font-family:var(--f-ui);font-size:0.6rem;color:var(--muted);margin-top:4px;line-height:1.5">'
+    + c.visits + ' visit' + (c.visits === 1 ? '' : 's')
+    + ' &nbsp;·&nbsp; ~' + timeLabel + ' total'
+    + (lastLabel ? '<br>Last visited ' + lastLabel : '')
+    + '</div>';
 }
 
 // Builds and opens the exact welcome-message template requested, with the
@@ -6076,8 +6133,10 @@ function doLogout() {
   if (wasEmployee) saveCurrentCartAsAbandoned(); // preserve any in-progress order before clearing
   LOGGED_IN_PROFILE = null;
   EMP_PROFILE = null;
+  if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
   try { sessionStorage.removeItem('tth_profile'); } catch(e) {}
   try { sessionStorage.removeItem('tth_emp'); } catch(e) {}
+  try { sessionStorage.removeItem('tth_session_id'); } catch(e) {} // next login = a genuinely new visit
   hideEmpBrowsingBanner();
   if (wasEmployee) { cart = {}; try { saveCart(); } catch(e) {} }
 
