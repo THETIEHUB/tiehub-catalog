@@ -872,6 +872,14 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 
     <!-- ORDER QUEUE TAB -->
     <div id="emp-orders-tab">
+      <!-- Manager-only: order-edit requests awaiting approval. Hidden
+           entirely (not just visually) for anyone whose role isn't
+           "manager" — non-managers never even trigger the fetch. -->
+      <div id="pending-edits-section" style="display:none;margin-bottom:1.5rem">
+        <div style="font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:#8B6F1F;margin-bottom:0.6rem">Pending Order Edits — Needs Your Approval</div>
+        <div id="pending-edits-list"></div>
+      </div>
+
       <div style="display:flex;gap:0.7rem;margin-bottom:1rem;flex-wrap:wrap">
         <button class="emp-filter-btn active" onclick="filterOrders('all',this)">All</button>
         <button class="emp-filter-btn" onclick="filterOrders('Received',this)">Received</button>
@@ -4161,6 +4169,10 @@ function loadEmpDashboard(profile) {
   document.getElementById('emp-orders-list').innerHTML = '<div class="emp-loading">Loading orders...</div>';
   document.getElementById('emp-customers-list').innerHTML = '<div class="emp-loading">Loading customers...</div>';
 
+  // Only managers ever fetch or see pending order-edit approval requests —
+  // non-managers don't even trigger this call.
+  if (profile.role === 'manager') loadPendingOrderEdits();
+
   fetch(url).then(function(r){ return r.json(); }).then(function(data){
     if (!data.ok) {
       document.getElementById('emp-orders-list').innerHTML = '<div class="emp-loading">Error: ' + (data.error||'Could not load') + '</div>';
@@ -5922,6 +5934,74 @@ function loadCustomerLedger(gstin) {
 // new product from the catalog. Only reachable on "Received" orders — the
 // backend double-checks this too, so a stale button click can't slip an
 // edit through on something already confirmed/dispatched.
+// ===== MANAGER APPROVAL: pending order-edit requests =====
+function loadPendingOrderEdits() {
+  fetch(BACKEND_URL + '?action=get_pending_order_edits&_t=' + encodeURIComponent(BACKEND_TOKEN))
+    .then(function(r){ return r.json(); })
+    .then(function(edits){ renderPendingOrderEdits(edits || []); })
+    .catch(function(){ /* non-critical — order queue itself still loads fine */ });
+}
+
+function renderPendingOrderEdits(edits) {
+  var section = document.getElementById('pending-edits-section');
+  var list = document.getElementById('pending-edits-list');
+  if (!edits.length) { section.style.display = 'none'; list.innerHTML = ''; return; }
+  section.style.display = 'block';
+
+  list.innerHTML = edits.map(function(ed){
+    var safeId = ed.edit_id.replace(/'/g, "\\'");
+    var currentBySku = {};
+    ed.current_items.forEach(function(it){ currentBySku[it.sku] = it.qty; });
+    var proposedBySku = {};
+    ed.proposed_items.forEach(function(it){ proposedBySku[it.sku] = it.qty; });
+    var allSkus = Array.from(new Set(ed.current_items.map(function(it){return it.sku;}).concat(ed.proposed_items.map(function(it){return it.sku;}))));
+
+    var diffRows = allSkus.map(function(sku){
+      var was = currentBySku[sku];
+      var now = proposedBySku[sku];
+      var label, color;
+      if (was === undefined) { label = '+ ' + sku + ' (new, qty ' + now + ')'; color = '#0F5132'; }
+      else if (now === undefined) { label = '&minus; ' + sku + ' (removed)'; color = '#C0392B'; }
+      else if (was !== now) { label = sku + ': ' + was + ' &rarr; ' + now; color = '#856404'; }
+      else { label = sku + ': ' + was + ' (unchanged)'; color = 'var(--muted)'; }
+      return '<div style="font-size:0.75rem;color:' + color + '">' + label + '</div>';
+    }).join('');
+
+    return '<div style="background:#FFF9EE;border:1px solid #E9D9AE;border-radius:3px;padding:0.9rem 1.1rem;margin-bottom:0.7rem">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">'
+      + '<div><strong style="font-family:monospace;color:#8B6F1F">' + ed.po + '</strong> — ' + ed.shop + '</div>'
+      + '<div style="font-size:0.65rem;color:var(--muted)">Requested by ' + ed.requested_by + ' &middot; ' + ed.requested_at + '</div>'
+      + '</div>'
+      + '<div style="margin:8px 0">' + diffRows + '</div>'
+      + '<div style="display:flex;gap:8px;margin-top:8px">'
+      + '<button class="oc-btn primary" onclick="reviewOrderEdit(\'' + safeId + '\',\'approve\')">✓ Approve</button>'
+      + '<button class="oc-btn danger" onclick="reviewOrderEdit(\'' + safeId + '\',\'reject\')">✕ Reject</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function reviewOrderEdit(editId, decision) {
+  if (decision === 'reject' && !confirm('Reject this order edit request?')) return;
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify({
+      action: 'review_order_edit', edit_id: editId, decision: decision,
+      emp_role: EMP_PROFILE ? EMP_PROFILE.role : '',
+      emp_name: EMP_PROFILE ? EMP_PROFILE.name : '',
+      _t: BACKEND_TOKEN
+    })
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if (data.ok) {
+      loadPendingOrderEdits(); // refresh the approval list
+      if (decision === 'approve' && EMP_PROFILE) loadEmpDashboard(EMP_PROFILE); // refresh order totals too
+    } else {
+      alert('Could not process this: ' + (data.error || ''));
+    }
+  }).catch(function(){ alert('Connection error. Please try again.'); });
+}
+
 var _editOrderItems = []; // working copy while the modal is open
 var _currentEditOrderPo = ''; // which PO the open modal is editing
 
@@ -6038,11 +6118,16 @@ function saveEditOrder(po) {
     body: JSON.stringify({
       action: 'update_order_items', po: po,
       items: _editOrderItems.map(function(it){ return { sku: it.sku, qty: it.qty }; }),
+      emp_role: EMP_PROFILE ? EMP_PROFILE.role : '',
+      emp_name: EMP_PROFILE ? EMP_PROFILE.name : '',
       _t: BACKEND_TOKEN
     })
   }).then(function(r){ return r.json(); }).then(function(data){
     if (data.ok) {
       document.getElementById('editorder-modal').remove();
+      if (data.pendingApproval) {
+        alert('Your changes have been submitted for manager approval. The order won\'t update until a manager reviews it.');
+      }
       if (EMP_PROFILE) loadEmpDashboard(EMP_PROFILE); // refresh Order Queue to show updated totals
     } else {
       errEl.textContent = data.error || 'Could not save changes.';
