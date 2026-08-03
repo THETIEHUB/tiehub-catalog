@@ -3128,9 +3128,11 @@ async function exportCatalogLookbook(perPage) {
     + '  turningPage.classList.remove("lb-flat-left","lb-flat-right");'
     + '  if(dir>0){'
     + '    turningPage.classList.add("lb-flat-right");'
+    + '    void turningPage.offsetHeight;'
     + '    requestAnimationFrame(function(){ turningPage.classList.add("lb-turning-fwd"); turningPage.classList.remove("lb-flat-right"); });'
     + '  } else {'
     + '    turningPage.classList.add("lb-flat-left");'
+    + '    void turningPage.offsetHeight;'
     + '    requestAnimationFrame(function(){ turningPage.classList.add("lb-turning-back"); turningPage.classList.remove("lb-flat-left"); });'
     + '  }'
     + '  setTimeout(function(){'
@@ -4130,9 +4132,11 @@ function fbvGoPage(dir) {
   turningPage.classList.remove('fbv-flat-left', 'fbv-flat-right');
   if (dir > 0) {
     turningPage.classList.add('fbv-flat-right');
+    void turningPage.offsetHeight; // forces the browser to paint this starting state before we change it — without this, the class change below can get coalesced with the one above and the transition never has a "from" state to animate away from
     requestAnimationFrame(function(){ turningPage.classList.add('fbv-turning-fwd'); turningPage.classList.remove('fbv-flat-right'); });
   } else {
     turningPage.classList.add('fbv-flat-left');
+    void turningPage.offsetHeight; // same fix, reverse direction
     requestAnimationFrame(function(){ turningPage.classList.add('fbv-turning-back'); turningPage.classList.remove('fbv-flat-left'); });
   }
   setTimeout(function(){
