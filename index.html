@@ -2681,7 +2681,16 @@ function fetchProductEnrichment_(skuList) {
 function handlePdfUploadForFlipbook(file) {
   if (!file) return;
   if (file.type !== 'application/pdf') { alert('Please choose a PDF file.'); return; }
-  if (file.size > 25 * 1024 * 1024) { alert('File too large. Please keep it under 25 MB.'); return; }
+  // Google Apps Script itself hard-caps how large a request it will accept
+  // (its web app POST body limit is fixed at 50MB, base64-encoding adds
+  // roughly 33% on top of the raw file), so there genuinely isn't a way to
+  // remove this ceiling entirely — it's a Google platform limit, not
+  // something this code is choosing to impose. 35MB raw leaves enough
+  // headroom that the base64 version stays under Apps Script's limit.
+  if (file.size > 35 * 1024 * 1024) {
+    alert('This file is ' + (file.size / (1024*1024)).toFixed(1) + ' MB. Google\'s servers cap uploads like this at roughly 35 MB — please compress the PDF (e.g. via smallpdf.com or Adobe\'s online compressor) and try again.');
+    return;
+  }
 
   var modal = document.createElement('div');
   modal.id = 'flipbook-upload-modal';
