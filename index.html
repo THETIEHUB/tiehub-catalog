@@ -658,6 +658,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     .fbv-page.fbv-turning-fwd{transform:rotateY(-180deg)}
     .fbv-page.fbv-turning-back{transform:rotateY(0deg)}
     .fbv-page img{width:100%;height:100%;object-fit:contain;background:#fff;display:block}
+    .fbv-page-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#FAF6EF}
     .fbv-bottombar{position:fixed;bottom:0;left:0;right:0;height:60px;background:#1A1612;display:flex;align-items:center;justify-content:center;gap:18px;border-top:1px solid #3A3128}
     .fbv-navbtn{background:none;border:1px solid #5A4E3A;color:#EDE6D6;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:14pt;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
     .fbv-navbtn:hover{background:#8B6F1F;border-color:#8B6F1F}
@@ -2682,13 +2683,11 @@ function handlePdfUploadForFlipbook(file) {
   if (!file) return;
   if (file.type !== 'application/pdf') { alert('Please choose a PDF file.'); return; }
   // Google Apps Script itself hard-caps how large a request it will accept
-  // (its web app POST body limit is fixed at 50MB, base64-encoding adds
-  // roughly 33% on top of the raw file), so there genuinely isn't a way to
-  // remove this ceiling entirely — it's a Google platform limit, not
-  // something this code is choosing to impose. 35MB raw leaves enough
-  // headroom that the base64 version stays under Apps Script's limit.
-  if (file.size > 35 * 1024 * 1024) {
-    alert('This file is ' + (file.size / (1024*1024)).toFixed(1) + ' MB. Google\'s servers cap uploads like this at roughly 35 MB — please compress the PDF (e.g. via smallpdf.com or Adobe\'s online compressor) and try again.');
+  // (its web app POST body limit is fixed at 50MB), so there genuinely
+  // isn't a way to remove this ceiling entirely — it's a Google platform
+  // limit, not something this code is choosing to impose.
+  if (file.size > 60 * 1024 * 1024) {
+    alert('This file is ' + (file.size / (1024*1024)).toFixed(1) + ' MB — too large even to process. Please compress the PDF (e.g. via smallpdf.com or Adobe\'s online compressor) and try again.');
     return;
   }
 
@@ -2701,39 +2700,82 @@ function handlePdfUploadForFlipbook(file) {
   document.body.appendChild(modal);
   var statusEl = document.getElementById('flipbook-upload-status');
 
-  var reader = new FileReader();
-  reader.onload = function() {
-    var base64 = reader.result.split(',')[1];
-    statusEl.textContent = 'Uploading — this can take a moment for larger files...';
-
-    fetch(BACKEND_URL, {
-      method: 'POST',
-      headers: {'Content-Type': 'text/plain;charset=utf-8'},
-      body: JSON.stringify({
-        action: 'upload_pdf_flipbook',
-        file_b64: base64,
-        file_name: file.name,
-        emp_name: EMP_PROFILE ? EMP_PROFILE.name : '',
-        _t: BACKEND_TOKEN
-      })
-    }).then(function(r){ return r.json(); }).then(function(data){
-      if (!data.ok) {
-        statusEl.textContent = 'Upload failed: ' + (data.error || 'Please try again.');
-        statusEl.style.color = '#C0392B';
-        return;
-      }
-      var flipUrl = 'https://thetiehub.github.io/tiehub-catalog/?flipbook=' + encodeURIComponent(data.file_id);
-      showFlipbookLinkModal_(flipUrl, file.name);
-    }).catch(function(){
-      statusEl.textContent = 'Connection error. Please try again.';
-      statusEl.style.color = '#C0392B';
-    });
-  };
-  reader.onerror = function() {
-    statusEl.textContent = 'Could not read this file. Please try again.';
+  // This is where the actual "compression" happens: every page gets turned
+  // into a modestly-sized JPEG RIGHT NOW, once, at upload time — done by
+  // you, not by every customer who opens the link. Whoever opens the
+  // flipbook link afterward just downloads these already-finished images
+  // directly; their browser never touches the original PDF or has to run
+  // any PDF-rendering library at all, which is what made viewing slow
+  // before. The one-time cost of doing this here is the trade for a much
+  // faster experience for everyone who opens the link afterward.
+  statusEl.textContent = 'Preparing PDF viewer...';
+  file.arrayBuffer().then(function(buf){
+    return ensurePdfJsLoadedForUpload_().then(function(){ return buf; });
+  }).then(function(buf){
+    return window.pdfjsLib.getDocument({ data: buf }).promise;
+  }).then(function(pdfDoc){
+    var renderedPages = [];
+    function renderNext(pageNum) {
+      if (pageNum > pdfDoc.numPages) { uploadRenderedPages_(renderedPages, file.name, statusEl, modal); return; }
+      statusEl.textContent = 'Compressing page ' + pageNum + ' of ' + pdfDoc.numPages + '...';
+      pdfDoc.getPage(pageNum).then(function(page){
+        var scale = 1.5; // matches the viewer's own quality target — no reason to store bigger than what's ever shown
+        var viewport = page.getViewport({ scale: scale });
+        var canvas = document.createElement('canvas');
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        var ctx = canvas.getContext('2d');
+        page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function(){
+          renderedPages.push({ dataUrl: canvas.toDataURL('image/jpeg', 0.82), w: viewport.width, h: viewport.height });
+          renderNext(pageNum + 1);
+        });
+      });
+    }
+    renderNext(1);
+  }).catch(function(err){
+    statusEl.textContent = 'Could not process this PDF: ' + (err.message || err);
     statusEl.style.color = '#C0392B';
-  };
-  reader.readAsDataURL(file);
+  });
+}
+
+function ensurePdfJsLoadedForUpload_() {
+  return new Promise(function(resolve, reject){
+    if (window.pdfjsLib) { resolve(); return; }
+    var script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = function(){
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve();
+    };
+    script.onerror = function(){ reject(new Error('Could not load the PDF processing library.')); };
+    document.head.appendChild(script);
+  });
+}
+
+function uploadRenderedPages_(renderedPages, fileName, statusEl, modal) {
+  statusEl.textContent = 'Uploading ' + renderedPages.length + ' page(s) — this can take a moment...';
+
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify({
+      action: 'upload_pdf_flipbook',
+      pages: renderedPages,
+      file_name: fileName,
+      emp_name: EMP_PROFILE ? EMP_PROFILE.name : '',
+      _t: BACKEND_TOKEN
+    })
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if (!data.ok) {
+      statusEl.textContent = 'Upload failed: ' + (data.error || 'Please try again.');
+      statusEl.style.color = '#C0392B';
+      return;
+    }
+    var flipUrl = 'https://thetiehub.github.io/tiehub-catalog/?flipbook=' + encodeURIComponent(data.file_id);
+    showFlipbookLinkModal_(flipUrl, fileName);
+  }).catch(function(){
+    statusEl.textContent = 'Connection error. Please try again.';
+    statusEl.style.color = '#C0392B';
+  });
 }
 
 function showFlipbookLinkModal_(flipUrl, fileName) {
@@ -4087,27 +4129,6 @@ function fbvShowError(msg) {
   if (spinner) spinner.style.display = 'none';
 }
 
-function fbvLoadPdfJs() {
-  return new Promise(function(resolve, reject){
-    if (window.pdfjsLib) { resolve(); return; }
-    var script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    script.onload = function(){
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      resolve();
-    };
-    script.onerror = function(){ reject(new Error('Could not load the PDF viewer library.')); };
-    document.head.appendChild(script);
-  });
-}
-
-function fbvBase64ToUint8Array(base64) {
-  var binary = atob(base64);
-  var bytes = new Uint8Array(binary.length);
-  for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
 function fbvLayout() {
   var pageEls = Array.prototype.slice.call(document.querySelectorAll('.fbv-page'));
   pageEls.forEach(function(p, i){
@@ -4132,11 +4153,11 @@ function fbvGoPage(dir) {
   turningPage.classList.remove('fbv-flat-left', 'fbv-flat-right');
   if (dir > 0) {
     turningPage.classList.add('fbv-flat-right');
-    void turningPage.offsetHeight; // forces the browser to paint this starting state before we change it — without this, the class change below can get coalesced with the one above and the transition never has a "from" state to animate away from
+    void turningPage.offsetHeight;
     requestAnimationFrame(function(){ turningPage.classList.add('fbv-turning-fwd'); turningPage.classList.remove('fbv-flat-right'); });
   } else {
     turningPage.classList.add('fbv-flat-left');
-    void turningPage.offsetHeight; // same fix, reverse direction
+    void turningPage.offsetHeight;
     requestAnimationFrame(function(){ turningPage.classList.add('fbv-turning-back'); turningPage.classList.remove('fbv-flat-left'); });
   }
   setTimeout(function(){
@@ -4152,12 +4173,18 @@ document.addEventListener('keydown', function(e){
   if (e.key === 'ArrowLeft') fbvGoPage(-1);
 });
 
-function fbvBuildViewer(fileName) {
+// Builds the viewer straight from already-rendered page images fetched from
+// the backend — no PDF.js, no rendering, no waiting here at all. All of
+// that work happened once already, at upload time (see
+// handlePdfUploadForFlipbook), which is exactly why this loads fast.
+function fbvBuildViewer(pages, fileName) {
   document.getElementById('fbv-doc-title').textContent = fileName || 'The Tie Hub';
+  fbvPages = pages;
+  fbvTotalPages = pages.length;
   var book = document.getElementById('fbv-book');
-  var firstPage = fbvPages[0];
+  var firstPage = pages[0];
   book.style.aspectRatio = firstPage.w + ' / ' + firstPage.h;
-  book.innerHTML = fbvPages.map(function(pg){
+  book.innerHTML = pages.map(function(pg){
     return '<div class="fbv-page"><img src="' + pg.dataUrl + '" alt=""></div>';
   }).join('');
   Array.prototype.slice.call(document.querySelectorAll('.fbv-page')).forEach(function(p){
@@ -4170,29 +4197,9 @@ function fbvBuildViewer(fileName) {
     var clickX = e.clientX - rect.left;
     if (clickX > rect.width / 2) fbvGoPage(1); else fbvGoPage(-1);
   });
-  fbvTotalPages = fbvPages.length;
   document.getElementById('fbv-loading').style.display = 'none';
   document.getElementById('fbv-viewer').style.display = 'block';
   fbvLayout();
-}
-
-function fbvRenderAllPages(pdfDoc, fileName) {
-  function renderNext(pageNum) {
-    if (pageNum > pdfDoc.numPages) { fbvBuildViewer(fileName); return; }
-    fbvShowError('Rendering page ' + pageNum + ' of ' + pdfDoc.numPages + '...');
-    pdfDoc.getPage(pageNum).then(function(page){
-      var scale = 2;
-      var viewport = page.getViewport({ scale: scale });
-      var canvas = document.createElement('canvas');
-      canvas.width = viewport.width; canvas.height = viewport.height;
-      var ctx = canvas.getContext('2d');
-      page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function(){
-        fbvPages.push({ dataUrl: canvas.toDataURL('image/jpeg', 0.88), w: viewport.width, h: viewport.height });
-        renderNext(pageNum + 1);
-      });
-    });
-  }
-  renderNext(1);
 }
 
 function fbvInit() {
@@ -4201,13 +4208,8 @@ function fbvInit() {
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (!data.ok) { fbvShowError(data.error || 'This document could not be found.'); return; }
-      fbvShowError('Preparing viewer...');
-      return fbvLoadPdfJs().then(function(){
-        var bytes = fbvBase64ToUint8Array(data.base64);
-        return window.pdfjsLib.getDocument({ data: bytes }).promise.then(function(pdfDoc){
-          fbvRenderAllPages(pdfDoc, data.file_name);
-        });
-      });
+      if (!data.pages || !data.pages.length) { fbvShowError('This document has no pages.'); return; }
+      fbvBuildViewer(data.pages, data.file_name);
     })
     .catch(function(err){
       fbvShowError('Could not load this document. ' + (err && err.message ? err.message : ''));
