@@ -637,6 +637,75 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 </style>
 </head>
 <body>
+
+<!-- ===== FLIPBOOK VIEWER — merged into the main site ===== -->
+<!-- Shown instead of the normal catalog when the URL has ?flipbook=<id>.
+     No login required — this is the public page a customer's shared link
+     points to, e.g. https://thetiehub.github.io/tiehub-catalog/?flipbook=XXXX
+     All classes below are prefixed "fbv-" to avoid colliding with the main
+     site's own .topbar/.page/etc. classes, which mean something different. -->
+<div id="fbv-root" style="display:none;position:fixed;inset:0;z-index:9999;background:#1A1612">
+  <style>
+    .fbv-topbar{position:fixed;top:0;left:0;right:0;height:54px;background:#1A1612;display:flex;align-items:center;justify-content:space-between;padding:0 18px;z-index:50;border-bottom:1px solid #3A3128}
+    .fbv-topbar-title{color:#EDE6D6;font-family:Georgia,serif;font-size:14pt;letter-spacing:0.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70vw}
+    .fbv-topbar-sub{color:#8B6F1F;font-size:8pt;letter-spacing:0.15em;text-transform:uppercase;margin-left:10px}
+    .fbv-stage{position:absolute;top:54px;bottom:60px;left:0;right:0;display:flex;align-items:center;justify-content:center;perspective:2600px}
+    .fbv-book{position:relative;height:80vh;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+    .fbv-page{position:absolute;inset:0;width:100%;height:100%;background:#fff;backface-visibility:hidden;transform-origin:left center;transform-style:preserve-3d;transition:transform 0.7s cubic-bezier(0.45,0.05,0.55,0.95);will-change:transform;overflow:hidden}
+    .fbv-page .fbv-page-back{position:absolute;inset:0;background:#F3EDE0;backface-visibility:hidden;transform:rotateY(180deg);box-shadow:inset 8px 0 18px -8px rgba(0,0,0,0.18)}
+    .fbv-page.fbv-flat-left{transform:rotateY(-180deg)}
+    .fbv-page.fbv-flat-right{transform:rotateY(0deg)}
+    .fbv-page.fbv-turning-fwd{transform:rotateY(-180deg)}
+    .fbv-page.fbv-turning-back{transform:rotateY(0deg)}
+    .fbv-page img{width:100%;height:100%;object-fit:contain;background:#fff;display:block}
+    .fbv-bottombar{position:fixed;bottom:0;left:0;right:0;height:60px;background:#1A1612;display:flex;align-items:center;justify-content:center;gap:18px;border-top:1px solid #3A3128}
+    .fbv-navbtn{background:none;border:1px solid #5A4E3A;color:#EDE6D6;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:14pt;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+    .fbv-navbtn:hover{background:#8B6F1F;border-color:#8B6F1F}
+    .fbv-navbtn:disabled{opacity:0.3;cursor:default}
+    .fbv-pageindicator{color:#C7BCA3;font-size:9pt;letter-spacing:0.1em;min-width:90px;text-align:center}
+    .fbv-center-msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#C7BCA3;text-align:center;padding:0 20px;font-family:"Inter",sans-serif}
+    .fbv-spinner{width:34px;height:34px;border:3px solid #3A3128;border-top-color:#8B6F1F;border-radius:50%;animation:fbv-spin 0.9s linear infinite}
+    @keyframes fbv-spin{to{transform:rotate(360deg)}}
+  </style>
+
+  <div id="fbv-loading" class="fbv-center-msg">
+    <div class="fbv-spinner"></div>
+    <div id="fbv-loading-text">Loading flipbook...</div>
+  </div>
+
+  <div id="fbv-viewer" style="display:none">
+    <div class="fbv-topbar">
+      <div><span class="fbv-topbar-title" id="fbv-doc-title">The Tie Hub</span><span class="fbv-topbar-sub">Catalog</span></div>
+    </div>
+    <div class="fbv-stage"><div class="fbv-book" id="fbv-book"></div></div>
+    <div class="fbv-bottombar">
+      <button class="fbv-navbtn" id="fbv-prevBtn" onclick="fbvGoPage(-1)">&#8249;</button>
+      <div class="fbv-pageindicator" id="fbv-indicator">1 / 1</div>
+      <button class="fbv-navbtn" id="fbv-nextBtn" onclick="fbvGoPage(1)">&#8250;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== FLIPBOOK VIEWER MODE — runs INSTEAD of the normal site if the URL
+  // has ?flipbook=<id>. Must execute before anything else (login screen,
+  // loadDataFromBackend, etc.) so a customer opening this link never sees
+  // any of that — just the flipbook, no account needed.
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var fbvFileId = params.get('flipbook');
+    if (!fbvFileId) return; // normal site — do nothing, let the rest of the page boot as usual
+
+    document.getElementById('fbv-root').style.display = 'block';
+    document.getElementById('fbv-root').style.zIndex = '99999'; // higher than #login-screen (9999) — that div is still visible-by-default at this point and sits later in the DOM, so equal z-index would let it cover the flipbook
+    // Actual fetch/render kicks off later, once BACKEND_URL is defined
+    // further down this same script block — see fbvInit() call at the
+    // bottom of the file.
+    window._fbvActive = true;
+    window._fbvFileId = fbvFileId;
+  })();
+</script>
+
 <script>
   // Auto-detect Apps Script URL. When served from Apps Script, location.origin
   // contains "googleusercontent.com" and we use the parent frame's URL.
@@ -1090,6 +1159,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <button class="export-pdf-btn" onclick="openBulkImport()" title="Upload Excel file to bulk-add products">⬆ Bulk Order</button>
     <button class="export-pdf-btn" onclick="openLookbookOptionsModal('pdf')" title="Download current products as PDF (or just the ticked ones, if any)">⬇ Export PDF</button>
     <button class="export-pdf-btn" onclick="openLookbookOptionsModal()" title="View as a flipbook lookbook (or just the ticked products, if any)" style="background:#8B6F1F">📖 Lookbook</button>
+    <button class="export-pdf-btn" onclick="document.getElementById('pdf-upload-input').click()" title="Upload any PDF and get a shareable flipbook link" style="background:#3D3830">⬆ Upload PDF → Flipbook Link</button>
+    <input type="file" id="pdf-upload-input" accept="application/pdf" style="display:none" onchange="handlePdfUploadForFlipbook(this.files[0]); this.value='';">
   </div>
 
   <!-- Sidebar + Grid layout -->
@@ -2599,6 +2670,112 @@ function fetchProductEnrichment_(skuList) {
   });
 }
 
+// ===== UPLOAD ANY PDF -> GET A REAL SHAREABLE FLIPBOOK LINK =====
+// Uploads the PDF to Google Drive (via the backend) and returns a
+// permanent link — https://thetiehub.github.io/tiehub-catalog/?flipbook=XXXX
+// — that anyone can open with no login at all, same idea as a
+// FlippingBook.com share link. Everything lives in this one file: the
+// "?flipbook=" check near the top of <body> detects the link, hides the
+// normal catalog, and shows just the flipbook viewer (see the fbv* functions
+// defined near BACKEND_URL) — no separate flipbook.html file to maintain.
+function handlePdfUploadForFlipbook(file) {
+  if (!file) return;
+  if (file.type !== 'application/pdf') { alert('Please choose a PDF file.'); return; }
+  if (file.size > 25 * 1024 * 1024) { alert('File too large. Please keep it under 25 MB.'); return; }
+
+  var modal = document.createElement('div');
+  modal.id = 'flipbook-upload-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,16,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML = '<div style="background:var(--cream);max-width:460px;width:100%;border-top:3px solid #8B6F1F;padding:1.8rem">'
+    + '<div id="flipbook-upload-status" style="font-family:var(--f-ui);font-size:0.8rem;color:var(--ink);text-align:center">Reading file...</div>'
+    + '</div>';
+  document.body.appendChild(modal);
+  var statusEl = document.getElementById('flipbook-upload-status');
+
+  var reader = new FileReader();
+  reader.onload = function() {
+    var base64 = reader.result.split(',')[1];
+    statusEl.textContent = 'Uploading — this can take a moment for larger files...';
+
+    fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        action: 'upload_pdf_flipbook',
+        file_b64: base64,
+        file_name: file.name,
+        emp_name: EMP_PROFILE ? EMP_PROFILE.name : '',
+        _t: BACKEND_TOKEN
+      })
+    }).then(function(r){ return r.json(); }).then(function(data){
+      if (!data.ok) {
+        statusEl.textContent = 'Upload failed: ' + (data.error || 'Please try again.');
+        statusEl.style.color = '#C0392B';
+        return;
+      }
+      var flipUrl = 'https://thetiehub.github.io/tiehub-catalog/?flipbook=' + encodeURIComponent(data.file_id);
+      showFlipbookLinkModal_(flipUrl, file.name);
+    }).catch(function(){
+      statusEl.textContent = 'Connection error. Please try again.';
+      statusEl.style.color = '#C0392B';
+    });
+  };
+  reader.onerror = function() {
+    statusEl.textContent = 'Could not read this file. Please try again.';
+    statusEl.style.color = '#C0392B';
+  };
+  reader.readAsDataURL(file);
+}
+
+function showFlipbookLinkModal_(flipUrl, fileName) {
+  var existing = document.getElementById('flipbook-upload-modal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'flipbook-link-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,16,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML = '<div style="background:var(--cream);max-width:480px;width:100%;border-top:3px solid #8B6F1F">'
+    + '<div style="padding:1.3rem 1.8rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+    + '<div style="font-family:var(--f-display);font-size:1.1rem;font-weight:500;color:var(--dark)">Flipbook Ready</div>'
+    + '<button onclick="document.getElementById(\'flipbook-link-modal\').remove()" style="background:none;border:1px solid var(--border2);color:var(--muted);width:30px;height:30px;cursor:pointer;font-size:1.1rem">&times;</button>'
+    + '</div>'
+    + '<div style="padding:1.5rem 1.8rem">'
+    + '<div style="font-family:var(--f-ui);font-size:0.7rem;color:var(--muted);margin-bottom:0.6rem">' + fileName + ' is now live at this link — anyone can open it, no login needed:</div>'
+    + '<input type="text" readonly value="' + flipUrl + '" id="flipbook-link-input" onclick="this.select()" style="width:100%;padding:0.6rem;border:1px solid var(--border2);font-family:monospace;font-size:0.75rem;margin-bottom:0.8rem">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    + '<button class="oc-btn primary" onclick="copyFlipbookLink_()">📋 Copy Link</button>'
+    + '<button class="oc-btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="shareFlipbookOnWhatsApp_()">💬 Share on WhatsApp</button>'
+    + '<button class="oc-btn" onclick="previewFlipbookLink_()">👁 Preview</button>'
+    + '</div>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+}
+
+// Small helpers instead of inline string-built onclick handlers — avoids
+// any risk of quote-escaping bugs when the URL or filename contains
+// characters like apostrophes.
+function shareFlipbookOnWhatsApp_() {
+  var url = document.getElementById('flipbook-link-input').value;
+  var msg = "Here's our catalog: " + url;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+
+function previewFlipbookLink_() {
+  var url = document.getElementById('flipbook-link-input').value;
+  window.open(url, '_blank');
+}
+
+function copyFlipbookLink_() {
+  var input = document.getElementById('flipbook-link-input');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(function(){
+    alert('Link copied!');
+  }).catch(function(){
+    document.execCommand('copy'); // fallback for older browsers
+    alert('Link copied!');
+  });
+}
+
 async function exportCatalogLookbook(perPage) {
   perPage = [1,2,3,4,5].includes(perPage) ? perPage : 4;
   var optionsModal = document.getElementById('lookbook-options-modal');
@@ -3884,6 +4061,148 @@ var BACKEND_TOKEN = 'TTH-2026-Mumbai-K9pQ7xR2vN5wL8mF';
 // separate popup window (window.open + document.write), where a relative
 // "images/logo.png" path wouldn't resolve to this site at all.
 var LOGO_URL = 'https://thetiehub.github.io/tiehub-catalog/images/logo.png';
+
+// ===== FLIPBOOK VIEWER MODE — actual implementation =====
+// Fetches the PDF (via the same backend, action=get_pdf_flipbook_file — no
+// login/secret needed, public by design), renders every page with PDF.js,
+// and shows the page-turn viewer. Runs standalone, independent of the rest
+// of the catalog's login/data-loading flow.
+var fbvPages = [], fbvCurrent = 0, fbvAnimating = false, fbvTotalPages = 0;
+
+function fbvShowError(msg) {
+  var el = document.getElementById('fbv-loading-text');
+  if (el) el.textContent = msg;
+  var spinner = document.querySelector('.fbv-spinner');
+  if (spinner) spinner.style.display = 'none';
+}
+
+function fbvLoadPdfJs() {
+  return new Promise(function(resolve, reject){
+    if (window.pdfjsLib) { resolve(); return; }
+    var script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = function(){
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve();
+    };
+    script.onerror = function(){ reject(new Error('Could not load the PDF viewer library.')); };
+    document.head.appendChild(script);
+  });
+}
+
+function fbvBase64ToUint8Array(base64) {
+  var binary = atob(base64);
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function fbvLayout() {
+  var pageEls = Array.prototype.slice.call(document.querySelectorAll('.fbv-page'));
+  pageEls.forEach(function(p, i){
+    p.classList.remove('fbv-flat-left', 'fbv-flat-right', 'fbv-turning-fwd', 'fbv-turning-back');
+    if (i < fbvCurrent) { p.classList.add('fbv-flat-left'); p.style.zIndex = i; }
+    else { p.classList.add('fbv-flat-right'); p.style.zIndex = fbvTotalPages - i; }
+  });
+  document.getElementById('fbv-indicator').textContent = (fbvCurrent + 1) + ' / ' + fbvTotalPages;
+  document.getElementById('fbv-prevBtn').disabled = fbvCurrent === 0 || fbvAnimating;
+  document.getElementById('fbv-nextBtn').disabled = fbvCurrent >= fbvTotalPages - 1 || fbvAnimating;
+}
+
+function fbvGoPage(dir) {
+  if (fbvAnimating) return;
+  if (dir > 0 && fbvCurrent >= fbvTotalPages - 1) return;
+  if (dir < 0 && fbvCurrent <= 0) return;
+  fbvAnimating = true;
+  var pageEls = Array.prototype.slice.call(document.querySelectorAll('.fbv-page'));
+  var turningIdx = dir > 0 ? fbvCurrent : fbvCurrent - 1;
+  var turningPage = pageEls[turningIdx];
+  turningPage.style.zIndex = fbvTotalPages + 5;
+  turningPage.classList.remove('fbv-flat-left', 'fbv-flat-right');
+  if (dir > 0) {
+    turningPage.classList.add('fbv-flat-right');
+    requestAnimationFrame(function(){ turningPage.classList.add('fbv-turning-fwd'); turningPage.classList.remove('fbv-flat-right'); });
+  } else {
+    turningPage.classList.add('fbv-flat-left');
+    requestAnimationFrame(function(){ turningPage.classList.add('fbv-turning-back'); turningPage.classList.remove('fbv-flat-left'); });
+  }
+  setTimeout(function(){
+    fbvCurrent = dir > 0 ? fbvCurrent + 1 : fbvCurrent - 1;
+    fbvAnimating = false;
+    fbvLayout();
+  }, 700);
+}
+
+document.addEventListener('keydown', function(e){
+  if (!window._fbvActive) return;
+  if (e.key === 'ArrowRight') fbvGoPage(1);
+  if (e.key === 'ArrowLeft') fbvGoPage(-1);
+});
+
+function fbvBuildViewer(fileName) {
+  document.getElementById('fbv-doc-title').textContent = fileName || 'The Tie Hub';
+  var book = document.getElementById('fbv-book');
+  var firstPage = fbvPages[0];
+  book.style.aspectRatio = firstPage.w + ' / ' + firstPage.h;
+  book.innerHTML = fbvPages.map(function(pg){
+    return '<div class="fbv-page"><img src="' + pg.dataUrl + '" alt=""></div>';
+  }).join('');
+  Array.prototype.slice.call(document.querySelectorAll('.fbv-page')).forEach(function(p){
+    var back = document.createElement('div');
+    back.className = 'fbv-page-back';
+    p.appendChild(back);
+  });
+  book.addEventListener('click', function(e){
+    var rect = this.getBoundingClientRect();
+    var clickX = e.clientX - rect.left;
+    if (clickX > rect.width / 2) fbvGoPage(1); else fbvGoPage(-1);
+  });
+  fbvTotalPages = fbvPages.length;
+  document.getElementById('fbv-loading').style.display = 'none';
+  document.getElementById('fbv-viewer').style.display = 'block';
+  fbvLayout();
+}
+
+function fbvRenderAllPages(pdfDoc, fileName) {
+  function renderNext(pageNum) {
+    if (pageNum > pdfDoc.numPages) { fbvBuildViewer(fileName); return; }
+    fbvShowError('Rendering page ' + pageNum + ' of ' + pdfDoc.numPages + '...');
+    pdfDoc.getPage(pageNum).then(function(page){
+      var scale = 2;
+      var viewport = page.getViewport({ scale: scale });
+      var canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      var ctx = canvas.getContext('2d');
+      page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function(){
+        fbvPages.push({ dataUrl: canvas.toDataURL('image/jpeg', 0.88), w: viewport.width, h: viewport.height });
+        renderNext(pageNum + 1);
+      });
+    });
+  }
+  renderNext(1);
+}
+
+function fbvInit() {
+  fbvShowError('Fetching document...');
+  fetch(BACKEND_URL + '?action=get_pdf_flipbook_file&id=' + encodeURIComponent(window._fbvFileId))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!data.ok) { fbvShowError(data.error || 'This document could not be found.'); return; }
+      fbvShowError('Preparing viewer...');
+      return fbvLoadPdfJs().then(function(){
+        var bytes = fbvBase64ToUint8Array(data.base64);
+        return window.pdfjsLib.getDocument({ data: bytes }).promise.then(function(pdfDoc){
+          fbvRenderAllPages(pdfDoc, data.file_name);
+        });
+      });
+    })
+    .catch(function(err){
+      fbvShowError('Could not load this document. ' + (err && err.message ? err.message : ''));
+    });
+}
+
+if (window._fbvActive) fbvInit();
+
 // ===== PER-CUSTOMER LOGIN =====
 var LOGGED_IN_PROFILE = null; // stores profile after successful login
 
@@ -6548,6 +6867,7 @@ function loadOrderHistory(gstin) {
 
 // Check session on page load
 (function checkAuth() {
+  if (window._fbvActive) return; // flipbook link — skip login entirely, nothing else on this page matters
   // Clear any stale sessions that might conflict
   // Employee session takes priority
   var empProfile = null;
@@ -6685,6 +7005,7 @@ function submitOrderToBackend() {
   });
 }
 document.addEventListener('DOMContentLoaded', function() {
+  if (window._fbvActive) return; // flipbook link — the whole catalog dataset is irrelevant here
   var co = document.getElementById('confirm-over');
   if (co) co.addEventListener('click', function(e) { if(e.target===e.currentTarget) closeConfirm(); });
   loadDataFromBackend();
