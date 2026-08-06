@@ -672,6 +672,17 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     .fbv-center-msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#C7BCA3;text-align:center;padding:0 20px;font-family:"Inter",sans-serif}
     .fbv-spinner{width:34px;height:34px;border:3px solid #3A3128;border-top-color:#8B6F1F;border-radius:50%;animation:fbv-spin 0.9s linear infinite}
     @keyframes fbv-spin{to{transform:rotate(360deg)}}
+    @media (max-width:767px){
+      .fbv-topbar{height:48px;padding:0 12px}
+      .fbv-topbar-title{font-size:11pt;max-width:60vw}
+      .fbv-topbar-sub{display:none}
+      .fbv-stage{top:48px;bottom:64px}
+      .fbv-book{height:70vh;max-width:94vw}
+      .fbv-bottombar{height:64px;gap:14px}
+      .fbv-navbtn{width:44px;height:44px;font-size:16pt}
+      .fbv-pageindicator{font-size:8.5pt;min-width:70px}
+      .fbv-spine{width:6px}
+    }
   </style>
 
   <div id="fbv-loading" class="fbv-center-msg">
@@ -943,6 +954,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <button class="emp-tab" id="etab-abandoned" onclick="switchEmpTab('abandoned')">Abandoned Carts</button>
       <button class="emp-tab" id="etab-addcust" onclick="switchEmpTab('addcust')">Add Customer</button>
       <button class="emp-tab" id="etab-visits" onclick="switchEmpTab('visits')">Visits &amp; Follow-ups</button>
+      <button class="emp-tab" id="etab-flipbooks" onclick="switchEmpTab('flipbooks')">Flipbooks</button>
     </div>
 
     <!-- ORDER QUEUE TAB -->
@@ -1104,6 +1116,20 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 
       <div id="emp-visits-list">
         <div class="emp-loading">Loading visits...</div>
+      </div>
+    </div>
+
+    <!-- FLIPBOOKS TAB — same Name + URL table as the Flipbooks Google Sheet,
+         shown directly in the site so staff can find and reuse a link
+         without opening the spreadsheet. -->
+    <div id="emp-flipbooks-tab" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.6rem">
+        <div style="font-family:var(--f-ui);font-size:0.62rem;color:var(--muted);letter-spacing:0.05em">Every flipbook link ever generated — reuse the same link instead of re-uploading</div>
+        <input type="text" id="flipbook-search" placeholder="Search by name..." oninput="renderFlipbooksList()"
+          style="font-family:var(--f-body);font-size:0.8rem;padding:0.5rem 0.7rem;border:1px solid var(--border2);min-width:220px">
+      </div>
+      <div id="emp-flipbooks-list">
+        <div class="emp-loading">Loading flipbooks...</div>
       </div>
     </div>
 
@@ -4132,7 +4158,7 @@ var LOGO_URL = 'https://thetiehub.github.io/tiehub-catalog/images/logo.png';
 // login/secret needed, public by design), renders every page with PDF.js,
 // and shows the page-turn viewer. Runs standalone, independent of the rest
 // of the catalog's login/data-loading flow.
-var fbvPages = [], fbvCurrent = 0, fbvAnimating = false, fbvTotalPages = 0;
+var fbvPages = [], fbvCurrent = 0, fbvAnimating = false, fbvTotalPages = 0, fbvPagesPerSpread = 2;
 
 function fbvShowError(msg) {
   var el = document.getElementById('fbv-loading-text');
@@ -4149,9 +4175,11 @@ function fbvLayout() {
     else { p.classList.add('fbv-flat-right'); p.style.zIndex = fbvTotalPages - i; }
   });
   // Show actual page numbers, not spread numbers — e.g. "2-3 of 24"
-  // instead of "spread 1 of 12", matching how real magazine viewers label it.
-  var firstPageNum = fbvCurrent * 2 + 1;
-  var secondPageNum = Math.min(firstPageNum + 1, fbvPages.length);
+  // instead of "spread 1 of 12", matching how real magazine viewers label
+  // it. On mobile (fbvPagesPerSpread === 1) this naturally just shows a
+  // single page number instead of a range.
+  var firstPageNum = fbvCurrent * fbvPagesPerSpread + 1;
+  var secondPageNum = Math.min(firstPageNum + fbvPagesPerSpread - 1, fbvPages.length);
   var indicatorText = (secondPageNum > firstPageNum)
     ? (firstPageNum + '-' + secondPageNum + ' / ' + fbvPages.length)
     : (firstPageNum + ' / ' + fbvPages.length);
@@ -4200,25 +4228,30 @@ function fbvBuildViewer(pages, fileName) {
   document.getElementById('fbv-doc-title').textContent = fileName || 'The Tie Hub';
   fbvPages = pages;
 
-  // Group individual pages into two-page spreads — page 1+2 together,
-  // 3+4 together, and so on (a lone last page if the count is odd just
-  // shows by itself on the left half, right half blank). Each spread is
-  // one flip unit — the SAME flip mechanism as before (fbvLayout/fbvGoPage
-  // below) is untouched; it just doesn't know or care that each ".fbv-page"
-  // now happens to contain two images side by side instead of one.
+  // A two-page spread is too cramped to read on a phone, so mobile gets a
+  // single page per flip instead — same flip mechanism either way, this
+  // just changes how many images sit inside each ".fbv-page" flip unit.
+  var isMobile = window.innerWidth < 768;
+  var pagesPerSpread = isMobile ? 1 : 2;
+
   var spreads = [];
-  for (var i = 0; i < pages.length; i += 2) {
-    spreads.push([pages[i], pages[i + 1] || null]);
+  for (var i = 0; i < pages.length; i += pagesPerSpread) {
+    spreads.push(pagesPerSpread === 1 ? [pages[i]] : [pages[i], pages[i + 1] || null]);
   }
   fbvTotalPages = spreads.length;
+  fbvPagesPerSpread = pagesPerSpread; // remembered for the page-number indicator in fbvLayout
 
   var book = document.getElementById('fbv-book');
   var firstSpread = spreads[0];
-  // A two-page spread is roughly twice as wide as a single page (same height)
-  var spreadW = firstSpread[0].w + (firstSpread[1] ? firstSpread[1].w : firstSpread[0].w);
+  var spreadW = (pagesPerSpread === 1)
+    ? firstSpread[0].w
+    : firstSpread[0].w + (firstSpread[1] ? firstSpread[1].w : firstSpread[0].w);
   book.style.aspectRatio = spreadW + ' / ' + firstSpread[0].h;
 
   book.innerHTML = spreads.map(function(sp){
+    if (pagesPerSpread === 1) {
+      return '<div class="fbv-page"><img src="' + sp[0].dataUrl + '" alt=""></div>';
+    }
     var leftImg = '<img src="' + sp[0].dataUrl + '" alt="" class="fbv-half-img">';
     var rightImg = sp[1] ? '<img src="' + sp[1].dataUrl + '" alt="" class="fbv-half-img">' : '<div class="fbv-half-img fbv-half-blank"></div>';
     return '<div class="fbv-page"><div class="fbv-spread"><div class="fbv-half">' + leftImg + '</div><div class="fbv-spine"></div><div class="fbv-half">' + rightImg + '</div></div></div>';
@@ -4609,16 +4642,19 @@ function switchEmpTab(tab) {
   document.getElementById('emp-abandoned-tab').style.display = tab === 'abandoned' ? 'block' : 'none';
   document.getElementById('emp-addcust-tab').style.display    = tab === 'addcust'   ? 'block' : 'none';
   document.getElementById('emp-visits-tab').style.display     = tab === 'visits'    ? 'block' : 'none';
+  document.getElementById('emp-flipbooks-tab').style.display  = tab === 'flipbooks' ? 'block' : 'none';
   document.getElementById('etab-orders').classList.toggle('active',    tab === 'orders');
   document.getElementById('etab-customers').classList.toggle('active', tab === 'customers');
   document.getElementById('etab-payments').classList.toggle('active',  tab === 'payments');
   document.getElementById('etab-abandoned').classList.toggle('active', tab === 'abandoned');
   document.getElementById('etab-addcust').classList.toggle('active',   tab === 'addcust');
   document.getElementById('etab-visits').classList.toggle('active',    tab === 'visits');
+  document.getElementById('etab-flipbooks').classList.toggle('active', tab === 'flipbooks');
   if (tab === 'payments')  loadPendingPayments();
   if (tab === 'abandoned') loadAbandonedCarts();
   if (tab === 'addcust')   populateAddCustStateDropdown();
   if (tab === 'visits')    loadVisits();
+  if (tab === 'flipbooks') loadFlipbooksList();
 }
 
 function filterOrders(status, btn) {
@@ -5128,6 +5164,60 @@ var STAFF_NAMES = ['Achint', 'Rajul', 'Bhoomika', 'Minakshi', 'Vishal', 'Neelam'
 var VISITS_CACHE = [];
 var _visitFilter = 'all';
 var _openFollowupEdit = null; // visit_id currently showing its inline date editor
+
+var _flipbooksCache = [];
+function loadFlipbooksList() {
+  fetch(BACKEND_URL + '?action=get_flipbooks_list&t=' + encodeURIComponent(BACKEND_TOKEN) + '&_cid=' + encodeURIComponent(getClientId()))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!data.ok) {
+        document.getElementById('emp-flipbooks-list').innerHTML = '<div class="emp-loading">Could not load flipbooks: ' + (data.error || '') + '</div>';
+        return;
+      }
+      _flipbooksCache = data.flipbooks || [];
+      renderFlipbooksList();
+    })
+    .catch(function(){
+      document.getElementById('emp-flipbooks-list').innerHTML = '<div class="emp-loading">Connection error. <button onclick="loadFlipbooksList()" style="margin-left:6px;background:#8B6F1F;color:#fff;border:none;padding:4px 10px;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer">Retry</button></div>';
+    });
+}
+
+function renderFlipbooksList() {
+  var query = (document.getElementById('flipbook-search')?.value || '').trim().toLowerCase();
+  var list = _flipbooksCache;
+  if (query) list = list.filter(function(f){ return f.name.toLowerCase().indexOf(query) !== -1; });
+
+  if (!list.length) {
+    document.getElementById('emp-flipbooks-list').innerHTML = '<div class="emp-loading">' + (_flipbooksCache.length ? 'No flipbooks match your search.' : 'No flipbooks uploaded yet — use "Upload PDF \u2192 Flipbook Link" from any category page to create one.') + '</div>';
+    return;
+  }
+
+  document.getElementById('emp-flipbooks-list').innerHTML = list.map(function(f, idx){
+    var safeUrl = f.url.replace(/'/g, "\\'");
+    return '<div class="order-card">'
+      + '<div>'
+      + '<div class="oc-po">' + f.name + '</div>'
+      + '<div class="oc-shop" style="font-family:monospace;font-size:0.72rem;color:var(--muted);word-break:break-all">' + f.url + '</div>'
+      + '<div class="oc-meta">' + f.pages + ' pages &nbsp;\u00b7&nbsp; uploaded by ' + f.uploaded_by + ' &nbsp;\u00b7&nbsp; ' + f.uploaded_at + '</div>'
+      + '<div class="oc-actions" style="margin-top:8px">'
+      + '<button class="oc-btn primary" onclick="copyFlipbookFromList_(\'' + safeUrl + '\')">\ud83d\udccb Copy Link</button>'
+      + '<button class="oc-btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="shareFlipbookFromList_(\'' + safeUrl + '\')">\ud83d\udcac WhatsApp</button>'
+      + '<button class="oc-btn" onclick="window.open(\'' + safeUrl + '\',\'_blank\')">\ud83d\udc41 Open</button>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function copyFlipbookFromList_(url) {
+  navigator.clipboard.writeText(url).then(function(){ alert('Link copied!'); })
+    .catch(function(){ prompt('Copy this link:', url); });
+}
+
+function shareFlipbookFromList_(url) {
+  var msg = "Here's our catalog: " + url;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
 
 function loadVisits() {
   var el = document.getElementById('emp-visits-list');
