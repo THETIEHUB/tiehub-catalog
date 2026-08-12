@@ -1189,8 +1189,14 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     </span>
     <button class="export-pdf-btn" onclick="shareFilteredOnWhatsApp()" title="Share current view on WhatsApp" style="background:#25D366">📱 WhatsApp</button>
     <button class="export-pdf-btn" onclick="openBulkImport()" title="Upload Excel file to bulk-add products">⬆ Bulk Order</button>
-    <button class="export-pdf-btn" onclick="openLookbookOptionsModal('pdf')" title="Download current products as PDF (or just the ticked ones, if any)">⬇ Export PDF</button>
-    <button class="export-pdf-btn" onclick="openLookbookOptionsModal()" title="View as a flipbook lookbook (or just the ticked products, if any)" style="background:#8B6F1F">📖 Lookbook</button>
+    <div class="nav-item" style="height:auto">
+      <button class="export-pdf-btn" onclick="toggleDownloadDropdown(event)" title="Download current products (or just the ticked ones, if any) as Excel, PDF, or Flipbook" style="background:#3D3830">⬇ Download ▾</button>
+      <div class="dropdown" id="download-dropdown" style="min-width:180px">
+        <div class="dd-item" onclick="exportCatalogExcel()"><span>📊 Excel</span></div>
+        <div class="dd-item" onclick="document.getElementById('download-dropdown').classList.remove('open');openLookbookOptionsModal('pdf')"><span>⬇ PDF</span></div>
+        <div class="dd-item" onclick="document.getElementById('download-dropdown').classList.remove('open');openLookbookOptionsModal()"><span>📖 Flipbook</span></div>
+      </div>
+    </div>
     <button class="export-pdf-btn" onclick="document.getElementById('pdf-upload-input').click()" title="Upload any PDF and get a shareable flipbook link" style="background:#3D3830">⬆ Upload PDF → Flipbook Link</button>
     <input type="file" id="pdf-upload-input" accept="application/pdf" style="display:none" onchange="handlePdfUploadForFlipbook(this.files[0]); this.value='';">
   </div>
@@ -1282,10 +1288,10 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <div class="fg-body" id="filter-patterns"></div>
       </div>
 
-      <!-- PRODUCT GROUP — restricted attribute. Only present in the data at
-           all for Rajul/Vishal/Neelam (enforced server-side in Code.gs), so
-           this naturally stays hidden for anyone else; no separate
-           permission check needed here on top of that. -->
+      <!-- PRODUCT GROUP — visible to any logged-in employee (enforced
+           server-side in Code.gs), hidden from customers browsing without
+           an employee login; no separate permission check needed here on
+           top of that. -->
       <div class="filter-group" id="group-filter-group" style="display:none">
         <div class="fg-head" onclick="toggleFilterGroup(this)">
           <span>Product Group</span><span class="fg-arrow">−</span>
@@ -1293,9 +1299,9 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <div class="fg-body" id="filter-groups"></div>
       </div>
 
-      <!-- SALE PRICE — same restricted attribute as Product Group. Only
-           present in the data at all for Rajul/Vishal/Neelam, so this stays
-           hidden automatically for anyone else. -->
+      <!-- SALE PRICE — narrower restricted attribute (RESTRICTED_SALEPRICE_VIEWERS
+           in Code.gs). Only present in the data at all for that short staff
+           list, so this stays hidden automatically for anyone else. -->
       <div class="filter-group" id="saleprice-filter-group" style="display:none">
         <div class="fg-head" onclick="toggleFilterGroup(this)">
           <span>Sale Price</span><span class="fg-arrow">−</span>
@@ -2133,8 +2139,8 @@ function getFiltered() {
   const patChecked = Array.from(document.querySelectorAll('input[name="f-pattern"]:checked')).map(i=>i.value);
   if (patChecked.length) list = list.filter(p => p.pattern && p.pattern.some(pt => patChecked.includes(pt)));
 
-  // Product Group filter — restricted attribute, only present on the
-  // product objects at all for Rajul/Vishal/Neelam (enforced server-side).
+  // Product Group filter — only present on the product objects at all for
+  // logged-in employees (enforced server-side); hidden for customers.
   const grpChecked = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(i=>i.value);
   if (grpChecked.length) list = list.filter(p => p.product_group && grpChecked.includes(p.product_group));
 
@@ -2261,8 +2267,8 @@ function buildFilterSidebar() {
   }
 
   // Show Product Group filter ONLY if the backend actually sent this data —
-  // which it only does for Rajul/Vishal/Neelam (enforced in Code.gs). For
-  // anyone else, groupCounts is always empty, so this stays hidden — no
+  // which it does for any logged-in employee (enforced in Code.gs). For
+  // customers, groupCounts is always empty, so this stays hidden — no
   // separate permission check needed on the frontend.
   var checkedGroups = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(function(i){return i.value;});
   const groupGroup = document.getElementById('group-filter-group');
@@ -3241,6 +3247,78 @@ async function exportCatalogLookbook(perPage) {
 
   win.document.write(html);
   win.document.close();
+}
+
+// ===== EXCEL EXPORT — Category / SKU / Group / Qty / Image link =====
+// Uses the exact same "ticked selection if any, else current filtered
+// view" rule as the PDF and Lookbook exports (getExportItems()), so
+// whatever's on screen (or whatever you've ticked) is exactly what comes
+// out in the spreadsheet — no separate condition to keep in sync.
+//
+// Image note: the xlsx.js library loaded on this page (SheetJS Community)
+// can't embed actual thumbnail pictures into cells — that needs a paid
+// SheetJS Pro build or a different library entirely. Instead each row's
+// Image column is a clickable hyperlink straight to the product photo,
+// which opens instantly in any spreadsheet app without bloating the file.
+function exportCatalogExcel() {
+  var dd = document.getElementById('download-dropdown');
+  if (dd) dd.classList.remove('open');
+
+  var items = getExportItems();
+  if (!items.length) { alert('No products to export. Adjust your filters.'); return; }
+
+  var showGroup = items.some(function(p){ return p.product_group; }); // present for any logged-in employee
+  var header = ['Category', 'SKU'];
+  if (showGroup) header.push('Group');
+  header.push('Qty Available', 'Image');
+
+  var rows = [header];
+  items.forEach(function(p){
+    var row = [p.cat, p.sku];
+    if (showGroup) row.push(p.product_group || '');
+    row.push(totalAvail(p));
+    row.push(p.img || '');
+    rows.push(row);
+  });
+
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Turn the Image column's URL text into a real clickable hyperlink.
+  var imgColIdx = header.length - 1;
+  for (var r = 1; r < rows.length; r++) {
+    var url = rows[r][imgColIdx];
+    if (!url) continue;
+    var cellRef = XLSX.utils.encode_cell({ r: r, c: imgColIdx });
+    if (ws[cellRef]) {
+      ws[cellRef].l = { Target: url };
+      ws[cellRef].v = 'View Image';
+    }
+  }
+
+  ws['!cols'] = header.map(function(h){ return h === 'Image' ? {wch: 14} : (h === 'Category' ? {wch: 22} : {wch: 16}); });
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Products');
+  XLSX.writeFile(wb, 'TieHub_Products_' + Date.now() + '.xlsx');
+}
+
+// ===== UNIFIED DOWNLOAD DROPDOWN — Excel / PDF / Flipbook =====
+function toggleDownloadDropdown(e) {
+  e.stopPropagation();
+  var dd = document.getElementById('download-dropdown');
+  var isOpen = dd.classList.contains('open');
+  document.querySelectorAll('.dropdown.open').forEach(function(d){ d.classList.remove('open'); });
+  if (!isOpen) {
+    dd.classList.add('open');
+    setTimeout(function(){
+      document.addEventListener('click', function closeDD(ev){
+        if (!dd.contains(ev.target)) {
+          dd.classList.remove('open');
+          document.removeEventListener('click', closeDD);
+        }
+      });
+    }, 50);
+  }
 }
 
 function exportCatalogPDF(perPage) {
