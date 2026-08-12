@@ -1653,9 +1653,13 @@ function goHome() {
   setNavActive(null);
 }
 
-function showCatalog(navKey) {
+function showCatalog(navKey, preserveSearch) {
   activeCat = navKey;
-  searchQ = '';
+  // Only clear the search box when navigating via a category link. When
+  // this is called from onSearch() (typing/scanning a SKU on the home
+  // page), preserveSearch=true keeps the just-typed query intact instead
+  // of wiping it the instant the page switches to catalog view.
+  if (!preserveSearch) searchQ = '';
   displayLimit = 80;
   document.getElementById('page-home').style.display = 'none';
   document.getElementById('page-account').style.display = 'none';
@@ -2631,7 +2635,7 @@ function onSearch() {
     qr.style.display = 'none';
   }
 
-  if (searchQ && document.getElementById('page-home').style.display !== 'none') showCatalog('ALL');
+  if (searchQ && document.getElementById('page-home').style.display !== 'none') showCatalog('ALL', true);
   else { buildFilterSidebar(); renderProducts(); }
 
   // If exactly 1 result → auto-jump and highlight
@@ -7208,6 +7212,15 @@ function loadDataFromBackend() {
     var products = results[0] || [];
     var customers = results[1] || {};
 
+    // The backend replies with {ok:false, error:...} (not an array) when
+    // the request is rate-limited or unauthorized. Treat that the same as
+    // a network failure instead of silently assigning a non-array to
+    // PRODUCTS, which used to leave the page stuck on "Loading products…"
+    // forever with no visible error.
+    if (!Array.isArray(products)) {
+      throw new Error((products && products.error) ? products.error : 'Products response was not a list');
+    }
+
     // Apply products
     PRODUCTS = products;
     console.log('Loaded ' + PRODUCTS.length + ' products from sheet');
@@ -7243,14 +7256,15 @@ function loadDataFromBackend() {
   }).catch(function(err){
     console.error('Failed to load data from backend:', err);
     var retryBtn = '<button onclick="loadDataFromBackend()" style="margin-left:8px;background:#8B6F1F;color:#fff;border:none;padding:6px 14px;font-family:var(--f-ui);font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer">Retry</button>';
-    var errMsg = '<div style="padding:2rem;text-align:center;color:#999">Could not load products.' + retryBtn + '</div>';
+    var reason = (err && err.message) ? ' (' + err.message + ')' : '';
+    var errMsg = '<div style="padding:2rem;text-align:center;color:#999">Could not load products.' + reason + retryBtn + '</div>';
     // Update whichever container is currently visible — on the home page
     // that's cats-grid; on a category page that's pgrid. Always update
     // both so the spinner never gets permanently stuck.
     var cg = document.getElementById('cats-grid');
     if (cg) cg.innerHTML = errMsg;
     var pg = document.getElementById('pgrid');
-    if (pg) pg.innerHTML = '<div class="state-box">Could not load products.' + retryBtn + '</div>';
+    if (pg) pg.innerHTML = '<div class="state-box">Could not load products.' + reason + retryBtn + '</div>';
   });
 }
 
