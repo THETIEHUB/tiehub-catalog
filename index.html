@@ -5255,6 +5255,7 @@ function submitAddCustomer() {
     discPct: parseFloat(document.getElementById('ac-discount').value) || 0,
     gstApply: ADD_CUST_GST_APPLY,
     placedByEmp: EMP_PROFILE ? EMP_PROFILE.name : '',
+    emp_id: EMP_PROFILE ? EMP_PROFILE.emp_id : '',
     _t: BACKEND_TOKEN
   };
 
@@ -5296,7 +5297,9 @@ var _openFollowupEdit = null; // visit_id currently showing its inline date edit
 
 var _flipbooksCache = [];
 function loadFlipbooksList() {
-  fetch(BACKEND_URL + '?action=get_flipbooks_list&t=' + encodeURIComponent(BACKEND_TOKEN) + '&_cid=' + encodeURIComponent(getClientId()))
+  fetch(BACKEND_URL + '?action=get_flipbooks_list&t=' + encodeURIComponent(BACKEND_TOKEN) + '&_cid=' + encodeURIComponent(getClientId())
+    + '&emp_id='   + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.emp_id : '')
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name  : ''))
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (!data.ok) {
@@ -6335,7 +6338,9 @@ function saveCurrentCartAsAbandoned() {
 function loadPendingPayments() {
   var el = document.getElementById('emp-payments-list');
   el.innerHTML = '<div class="emp-loading">Loading outstanding payments...</div>';
-  var url = BACKEND_URL + '?action=get_pending_payments&_t=' + encodeURIComponent(BACKEND_TOKEN);
+  var url = BACKEND_URL + '?action=get_pending_payments&_t=' + encodeURIComponent(BACKEND_TOKEN)
+    + '&emp_id='   + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.emp_id : '')
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE ? EMP_PROFILE.name  : '');
   fetch(url).then(function(r){ return r.json(); }).then(function(data){
     if (!data.ok) { el.innerHTML = '<div class="emp-loading">Error: ' + (data.error||'Could not load') + '</div>'; return; }
     var list = data.pending || [];
