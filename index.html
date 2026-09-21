@@ -4562,11 +4562,58 @@ function showEmpDashboard(profile) {
 
   // Fill employee name + role
   var isManager = profile.role === 'manager';
+  var isAdmin = profile.role === 'admin';
   document.getElementById('emp-name-hdr').textContent  = profile.name || profile.login_id;
-  document.getElementById('emp-role-lbl').textContent  = isManager ? 'Manager — Full Access' : 'Salesperson';
+  document.getElementById('emp-role-lbl').textContent  = isAdmin ? 'Admin — Full Access' : isManager ? 'Manager — Full Access' : 'Salesperson';
+
+  applyEmpTabPermissions(profile);
 
   // Load data
   loadEmpDashboard(profile);
+}
+
+// Shows/hides each dashboard tab button per the Employees sheet's own
+// checkbox columns (profile.tabs, set by doEmpLogin in Code.gs) — this is
+// what lets which-tabs-an-employee-sees be controlled entirely from the
+// sheet instead of a hardcoded list here. manager/admin/cre/crm
+// (profile.fullAccess) always see every tab regardless of the checkboxes.
+// If the tab that would normally be active by default (Order Queue) is
+// hidden for this employee, falls back to the first tab they can see
+// instead of leaving them looking at a hidden tab's empty content.
+var EMP_TAB_BUTTON_IDS = {
+  orderQueue:     'etab-orders',
+  myCustomers:    'etab-customers',
+  payments:       'etab-payments',
+  abandonedCarts: 'etab-abandoned',
+  addCustomer:    'etab-addcust',
+  visits:         'etab-visits',
+  flipbooks:      'etab-flipbooks'
+};
+var EMP_TAB_SWITCH_KEYS = {
+  orderQueue:     'orders',
+  myCustomers:    'customers',
+  payments:       'payments',
+  abandonedCarts: 'abandoned',
+  addCustomer:    'addcust',
+  visits:         'visits',
+  flipbooks:      'flipbooks'
+};
+
+function applyEmpTabPermissions(profile) {
+  var tabs = profile.tabs || {};
+  var fullAccess = !!profile.fullAccess;
+  var firstVisibleKey = null;
+  Object.keys(EMP_TAB_BUTTON_IDS).forEach(function(key){
+    var btn = document.getElementById(EMP_TAB_BUTTON_IDS[key]);
+    if (!btn) return;
+    var visible = fullAccess || tabs[key] !== false;
+    btn.style.display = visible ? '' : 'none';
+    if (visible && !firstVisibleKey) firstVisibleKey = key;
+  });
+  var orderQueueVisible = fullAccess || tabs.orderQueue !== false;
+  if (!orderQueueVisible && firstVisibleKey) {
+    switchEmpTab(EMP_TAB_SWITCH_KEYS[firstVisibleKey]);
+  }
 }
 
 function buildEmpHeader(profile) {
@@ -4655,9 +4702,9 @@ function loadEmpDashboard(profile) {
   document.getElementById('emp-orders-list').innerHTML = '<div class="emp-loading">Loading orders...</div>';
   document.getElementById('emp-customers-list').innerHTML = '<div class="emp-loading">Loading customers...</div>';
 
-  // Only managers ever fetch or see pending order-edit approval requests —
-  // non-managers don't even trigger this call.
-  if (profile.role === 'manager') loadPendingOrderEdits();
+  // Only managers/admins ever fetch or see pending order-edit approval
+  // requests — everyone else doesn't even trigger this call.
+  if (profile.role === 'manager' || profile.role === 'admin') loadPendingOrderEdits();
 
   fetch(url).then(function(r){ return r.json(); }).then(function(data){
     if (!data.ok) {
