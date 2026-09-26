@@ -2052,9 +2052,15 @@ function giftSetSuggestions(idx) {
   var first = giftSetSlots[0];
   if (!first || !first.color || !first.color.length || idx === 0) return [];
   var color = first.color[0];
+  var slotCat = giftSetSlotCategory[idx] || '';
   var usedCats = giftSetSlots.filter(Boolean).map(function(p){ return p.cat; });
   return PRODUCTS.filter(function(p){
-    return p.img && p.color && p.color.indexOf(color) !== -1 && usedCats.indexOf(p.cat) === -1;
+    if (!p.img || !p.color || p.color.indexOf(color) === -1) return false;
+    // If this piece's dropdown is set to a specific category, suggestions
+    // must come from that category only — a category pick is a stronger
+    // signal of intent than the general colour match.
+    if (slotCat) return p.cat === slotCat;
+    return usedCats.indexOf(p.cat) === -1;
   }).slice(0, 4);
 }
 
@@ -2076,8 +2082,18 @@ function removeGiftSetSlot(idx) {
 // they want this piece to come from.
 function onGiftSetCategoryChange(idx, cat) {
   giftSetSlotCategory[idx] = cat;
-  var input = document.getElementById('gs-search-' + idx);
-  onGiftSetSearch(idx, input ? input.value : '');
+  // Full re-render, not just the search box — the colour-matched
+  // suggestion cards for this slot are also filtered by category and need
+  // to refresh too, not just stay showing whatever they showed before.
+  var oldVal = '';
+  var oldInput = document.getElementById('gs-search-' + idx);
+  if (oldInput) oldVal = oldInput.value;
+  renderGiftSetModal();
+  var newInput = document.getElementById('gs-search-' + idx);
+  if (newInput) {
+    newInput.value = oldVal;
+    onGiftSetSearch(idx, oldVal);
+  }
 }
 
 function onGiftSetSearch(idx, val) {
