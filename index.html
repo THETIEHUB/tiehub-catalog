@@ -345,6 +345,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .gs-slot-cat{font-family:var(--f-display);font-size:0.85rem;color:var(--dark)}
 .gs-slot-price{font-family:var(--f-ui);font-size:0.72rem;color:var(--ink)}
 .gs-slot-remove{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.9rem}
+.gs-cat-select{width:100%;padding:0.5rem 0.6rem;border:1px solid var(--border2);font-family:var(--f-ui);font-size:0.72rem;background:#fff;margin-bottom:6px}
 .gs-search{width:100%;padding:0.5rem 0.6rem;border:1px solid var(--border2);font-family:var(--f-ui);font-size:0.75rem;background:var(--cream2)}
 .gs-results{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--gold3);z-index:20;max-height:240px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,0.15)}
 .gs-result-row{display:flex;gap:8px;align-items:center;padding:6px 8px;cursor:pointer;border-bottom:1px solid var(--border);font-family:var(--f-ui)}
@@ -354,8 +355,14 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .gs-r-cat{font-size:0.72rem;color:var(--dark)}
 .gs-r-price{margin-left:auto;font-size:0.68rem;color:var(--muted)}
 .gs-suggest{margin-top:0.6rem;padding-top:0.5rem;border-top:1px dashed var(--border)}
-.gs-suggest-lbl{font-family:var(--f-ui);font-size:0.54rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);margin-bottom:0.35rem}
-.gs-chip{display:inline-block;background:#FFF3D6;border:1px solid var(--gold3);padding:4px 8px;font-family:var(--f-ui);font-size:0.62rem;color:#6B5410;margin:0 4px 4px 0;cursor:pointer}
+.gs-suggest-lbl{font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:0.45rem;border-bottom:1px solid var(--gold3);padding-bottom:0.35rem}
+.gs-suggest-row{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.gs-suggest-card{background:#FFF9EC;border:1px solid var(--gold3);padding:6px;cursor:pointer;text-align:center}
+.gs-suggest-card:hover{background:#FFF3D6}
+.gs-suggest-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border:1px solid var(--border);margin-bottom:4px}
+.gs-suggest-sku{font-family:var(--f-ui);font-size:0.56rem;color:var(--gold);letter-spacing:0.03em}
+.gs-suggest-cat{font-family:var(--f-ui);font-size:0.62rem;color:var(--dark);font-weight:500}
+.gs-suggest-qty{font-family:var(--f-ui);font-size:0.54rem;color:var(--muted)}
 .gs-preview-card{max-width:420px;background:#fff;border:1px solid var(--border)}
 .gs-preview-imgs{display:grid;gap:2px;background:var(--border)}
 .gs-preview-imgs img{width:100%;height:100%;object-fit:contain;background:var(--cream2);aspect-ratio:1}
@@ -886,6 +893,9 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <div class="dropdown" id="acc-dropdown"></div>
   </div>
   <div class="nav-spacer"></div>
+  <div class="nav-item">
+    <button class="nav-link" onclick="openGiftSetBuilder()" style="background:var(--gold);color:var(--cream);font-weight:600;padding:0 1.1rem;margin:8px 0;border-radius:2px">🎁 Build a Gift Set</button>
+  </div>
   <div class="nav-item">
     <button class="nav-link" onclick="showCatalog('ALL')" id="nav-ALL" style="color:var(--gold)">All Products</button>
   </div>
@@ -1990,11 +2000,21 @@ function openBulkImport() {
 // sheet — this is a one-time picking helper, not a permanent SKU.
 var GIFTSET_SIZE = 3;
 var giftSetSlots = [null, null, null, null];
+var giftSetSlotCategory = ['', '', '', '']; // optional category filter per slot
+
+// Every category that actually has at least one photographed product —
+// same list a customer would find browsing normally, sorted A-Z.
+function getGiftSetCategoryList() {
+  var cats = {};
+  PRODUCTS.forEach(function(p){ if (p.img) cats[p.cat] = true; });
+  return Object.keys(cats).sort();
+}
 
 function openGiftSetBuilder() {
   var existing = document.getElementById('giftset-modal');
   if (existing) { existing.style.display = 'flex'; renderGiftSetModal(); return; }
   giftSetSlots = [null, null, null, null];
+  giftSetSlotCategory = ['', '', '', ''];
   GIFTSET_SIZE = 3;
   var modal = document.createElement('div');
   modal.id = 'giftset-modal';
@@ -2050,13 +2070,27 @@ function removeGiftSetSlot(idx) {
   renderGiftSetModal();
 }
 
+// Picking a category re-runs the search immediately (even with no text
+// typed yet) so the customer sees that category's products right away —
+// they don't have to type anything if they already know which category
+// they want this piece to come from.
+function onGiftSetCategoryChange(idx, cat) {
+  giftSetSlotCategory[idx] = cat;
+  var input = document.getElementById('gs-search-' + idx);
+  onGiftSetSearch(idx, input ? input.value : '');
+}
+
 function onGiftSetSearch(idx, val) {
   var resultsEl = document.getElementById('gs-results-' + idx);
   if (!resultsEl) return;
   var q = val.trim().toLowerCase();
-  if (!q) { resultsEl.style.display = 'none'; resultsEl.innerHTML = ''; return; }
+  var cat = giftSetSlotCategory[idx] || '';
+  if (!q && !cat) { resultsEl.style.display = 'none'; resultsEl.innerHTML = ''; return; }
   var matches = PRODUCTS.filter(function(p){
-    return p.img && (p.sku.toLowerCase().indexOf(q) !== -1 || p.cat.toLowerCase().indexOf(q) !== -1);
+    if (!p.img) return false;
+    if (cat && p.cat !== cat) return false;
+    if (q && p.sku.toLowerCase().indexOf(q) === -1 && p.cat.toLowerCase().indexOf(q) === -1) return false;
+    return true;
   }).slice(0, 8);
   if (!matches.length) {
     resultsEl.innerHTML = '<div class="gs-result-row">No matches</div>';
@@ -2067,7 +2101,7 @@ function onGiftSetSearch(idx, val) {
     var safeSku = p.sku.replace(/'/g, "\\'");
     return '<div class="gs-result-row" onclick="pickGiftSetSlot(' + idx + ',\'' + safeSku + '\')">'
       + '<img src="' + p.img + '">'
-      + '<div><div class="gs-r-sku">' + p.sku + '</div><div class="gs-r-cat">' + p.cat + '</div></div>'
+      + '<div><div class="gs-r-sku">' + p.sku + '</div><div class="gs-r-cat">' + p.cat + ' &middot; ' + totalAvail(p) + ' in stock</div></div>'
       + '<div class="gs-r-price">Rs ' + p.mrp.toLocaleString('en-IN') + '</div>'
       + '</div>';
   }).join('');
@@ -2091,16 +2125,26 @@ function renderGiftSetModal() {
         + '<div><div class="gs-slot-sku">' + p.sku + '</div><div class="gs-slot-cat">' + p.cat + '</div><div class="gs-slot-price">Rs ' + p.mrp.toLocaleString('en-IN') + '</div></div>'
         + '<button class="gs-slot-remove" onclick="removeGiftSetSlot(' + i + ')" title="Remove">&times;</button></div>';
     } else {
-      inner = '<input class="gs-search" placeholder="Search SKU or category..." oninput="onGiftSetSearch(' + i + ',this.value)">'
+      var catOptions = '<option value="">Any category</option>' + getGiftSetCategoryList().map(function(c){
+        return '<option value="' + c + '"' + (giftSetSlotCategory[i] === c ? ' selected' : '') + '>' + c + '</option>';
+      }).join('');
+      inner = '<select class="gs-cat-select" onchange="onGiftSetCategoryChange(' + i + ',this.value)">' + catOptions + '</select>'
+        + '<input class="gs-search" id="gs-search-' + i + '" placeholder="Search SKU..." oninput="onGiftSetSearch(' + i + ',this.value)">'
         + '<div class="gs-results" id="gs-results-' + i + '" style="display:none"></div>';
       var sugg = giftSetSuggestions(i);
       if (sugg.length) {
         inner += '<div class="gs-suggest"><div class="gs-suggest-lbl">Matches Piece 1\'s colour</div>'
+          + '<div class="gs-suggest-row">'
           + sugg.map(function(s){
               var safeSku2 = s.sku.replace(/'/g, "\\'");
-              return '<span class="gs-chip" onclick="pickGiftSetSlot(' + i + ',\'' + safeSku2 + '\')">' + s.cat + '</span>';
+              return '<div class="gs-suggest-card" onclick="pickGiftSetSlot(' + i + ',\'' + safeSku2 + '\')">'
+                + '<img src="' + s.img + '">'
+                + '<div class="gs-suggest-sku">' + s.sku + '</div>'
+                + '<div class="gs-suggest-cat">' + s.cat + '</div>'
+                + '<div class="gs-suggest-qty">' + totalAvail(s) + ' in stock</div>'
+                + '</div>';
             }).join('')
-          + '</div>';
+          + '</div></div>';
       }
     }
     slotsHtml += '<div class="gs-slot"><div class="gs-slot-label">Piece ' + (i+1) + '</div>' + inner + '</div>';
