@@ -2336,6 +2336,32 @@ function downloadBulkTemplate() {
 }
 
 
+// ===== SALESPERSON ACTIVITY LOGGING =====
+// Fire-and-forget usage tracking for Riddhi's separate sales-inquiry
+// dashboard (for the offline sales team) — measures how often each
+// salesperson actually sends a catalog/flipbook, logs a follow-up, adds a
+// customer, places an order, or logs in. Only logs employee actions (never
+// customer self-service), never blocks or surfaces its own errors, since a
+// missed log entry should never stop the real action it's describing.
+function logActivity(actionType, channel, reference, detail) {
+  if (!EMP_PROFILE) return;
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify({
+      action: 'log_activity',
+      emp_id: EMP_PROFILE.emp_id || '',
+      emp_name: EMP_PROFILE.name || '',
+      role: EMP_PROFILE.role || '',
+      action_type: actionType,
+      channel: channel || '',
+      reference: reference || '',
+      detail: detail || '',
+      _t: BACKEND_TOKEN
+    })
+  }).catch(function(){});
+}
+
 // ===== WHATSAPP SHARE FILTERED VIEW =====
 function shareFilteredOnWhatsApp() {
   var items = getFiltered();
@@ -2370,6 +2396,7 @@ function shareFilteredOnWhatsApp() {
 
   var waURL = 'https://wa.me/?text=' + encodeURIComponent(msg);
   window.open(waURL, '_blank');
+  logActivity('Catalog Shared (WhatsApp)', 'WhatsApp', catName, items.length + ' products');
 }
 
 // Raw material / made-to-order helpers
@@ -2386,9 +2413,6 @@ function getPriceRange(p) {
 function getFiltered() {
   const cats = getCatsForNav(activeCat);
   let list = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
-  // Only show products that actually have a real photo — a wholesale
-  // buyer can't meaningfully evaluate or order something they can't see.
-  list = list.filter(p => p.img);
   if (searchQ) {
     const q = searchQ.toLowerCase().replace(/[-_\s]/g, ''); // strip dashes/spaces for flexible match
     list = list.filter(p => {
@@ -2477,9 +2501,6 @@ function buildFilterSidebar() {
   // — since those are exactly what we're computing the option lists for.)
   const cats = getCatsForNav(activeCat);
   let inCat = cats ? PRODUCTS.filter(p => cats.includes(p.cat)) : PRODUCTS;
-  // Match getFiltered — only count products that actually have a photo,
-  // so filter option counts match what's actually shown in the grid.
-  inCat = inCat.filter(p => p.img);
 
   if (searchQ) {
     const q = searchQ.toLowerCase().replace(/[-_\s]/g, '');
@@ -3126,7 +3147,9 @@ function uploadRenderedPages_(renderedPages, fileName, flipbookName, statusEl, m
   });
 }
 
+var _lastFlipbookName = ''; // carries the name into copyFlipbookLink_/shareFlipbookOnWhatsApp_ for activity logging
 function showFlipbookLinkModal_(flipUrl, fileName) {
+  _lastFlipbookName = fileName;
   var existing = document.getElementById('flipbook-upload-modal');
   if (existing) existing.remove();
 
@@ -3158,6 +3181,7 @@ function shareFlipbookOnWhatsApp_() {
   var url = document.getElementById('flipbook-link-input').value;
   var msg = "Here's our catalog: " + url;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  logActivity('Flipbook Link Sent', 'WhatsApp', _lastFlipbookName, url);
 }
 
 function previewFlipbookLink_() {
@@ -3174,6 +3198,7 @@ function copyFlipbookLink_() {
     document.execCommand('copy'); // fallback for older browsers
     alert('Link copied!');
   });
+  logActivity('Flipbook Link Sent', 'Copy Link', _lastFlipbookName, input.value);
 }
 
 async function exportCatalogLookbook(perPage) {
@@ -4702,6 +4727,7 @@ function doLogin() {
       // EMPLOYEE LOGIN SUCCESS
       EMP_PROFILE = data.profile;
       try { sessionStorage.setItem('tth_emp', JSON.stringify(data.profile)); } catch(e){}
+      logActivity('Employee Login', '', '', '');
       var ls = document.getElementById('login-screen');
       ls.style.opacity = '0'; ls.style.transition = 'opacity 0.4s';
       setTimeout(function(){ ls.style.display = 'none'; }, 400);
@@ -5587,6 +5613,7 @@ function submitAddCustomer() {
     if (data.ok) {
       successEl.textContent = '✓ ' + shop + ' added to our customer database successfully.';
       successEl.style.display = 'block';
+      logActivity('Customer Added', '', shop, gst);
       // Clear the form for the next entry
       ['ac-shop','ac-gst','ac-addr','ac-city','ac-phone','ac-contact','ac-discount'].forEach(function(id){
         var el = document.getElementById(id); if (el) el.value = '';
@@ -5642,14 +5669,15 @@ function renderFlipbooksList() {
 
   document.getElementById('emp-flipbooks-list').innerHTML = list.map(function(f, idx){
     var safeUrl = f.url.replace(/'/g, "\\'");
+    var safeName = f.name.replace(/'/g, "\\'");
     return '<div class="order-card">'
       + '<div>'
       + '<div class="oc-po">' + f.name + '</div>'
       + '<div class="oc-shop" style="font-family:monospace;font-size:0.72rem;color:var(--muted);word-break:break-all">' + f.url + '</div>'
       + '<div class="oc-meta">' + f.pages + ' pages &nbsp;\u00b7&nbsp; uploaded by ' + f.uploaded_by + ' &nbsp;\u00b7&nbsp; ' + f.uploaded_at + '</div>'
       + '<div class="oc-actions" style="margin-top:8px">'
-      + '<button class="oc-btn primary" onclick="copyFlipbookFromList_(\'' + safeUrl + '\')">\ud83d\udccb Copy Link</button>'
-      + '<button class="oc-btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="shareFlipbookFromList_(\'' + safeUrl + '\')">\ud83d\udcac WhatsApp</button>'
+      + '<button class="oc-btn primary" onclick="copyFlipbookFromList_(\'' + safeUrl + '\',\'' + safeName + '\')">\ud83d\udccb Copy Link</button>'
+      + '<button class="oc-btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="shareFlipbookFromList_(\'' + safeUrl + '\',\'' + safeName + '\')">\ud83d\udcac WhatsApp</button>'
       + '<button class="oc-btn" onclick="window.open(\'' + safeUrl + '\',\'_blank\')">\ud83d\udc41 Open</button>'
       + '</div>'
       + '</div>'
@@ -5657,14 +5685,16 @@ function renderFlipbooksList() {
   }).join('');
 }
 
-function copyFlipbookFromList_(url) {
+function copyFlipbookFromList_(url, name) {
   navigator.clipboard.writeText(url).then(function(){ alert('Link copied!'); })
     .catch(function(){ prompt('Copy this link:', url); });
+  logActivity('Flipbook Link Sent', 'Copy Link', name || '', url);
 }
 
-function shareFlipbookFromList_(url) {
+function shareFlipbookFromList_(url, name) {
   var msg = "Here's our catalog: " + url;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  logActivity('Flipbook Link Sent', 'WhatsApp', name || '', url);
 }
 
 function loadVisits() {
@@ -5931,6 +5961,8 @@ function toggleFollowupEdit(visitId) {
 // Single entry point for the status dropdown — routes to whichever existing
 // handler that status actually needs (some need a reason/date, some don't).
 function handleStatusDropdown(visitId, newStatus, isInquiry) {
+  var v_ = VISITS_CACHE.find(function(x){ return x.visit_id === visitId; });
+  logActivity('Follow-up Logged', 'Status: ' + newStatus, v_ ? v_.shop : '', '');
   if (newStatus === 'Order Placed') { markOrderPlaced(visitId); return; }
   if (newStatus === 'Not Interested') { markNotInterested(visitId); return; }
   if (newStatus === 'Interested') { markInterested(visitId); return; }
@@ -6233,6 +6265,7 @@ function updateFollowupClick(visitId) {
       _openFollowupEdit = null;
       renderVisits();
       if (EMP_PROFILE) refreshVisitSummary(EMP_PROFILE);
+      logActivity('Follow-up Logged', 'Date Scheduled', v ? v.shop : '', dateVal);
     } else {
       alert('Error: ' + (data.error || 'Could not update date'));
     }
@@ -7591,6 +7624,7 @@ function submitOrderToBackend() {
     body: JSON.stringify(payload)
   }).then(function(){
     console.log('Order submitted to backend.');
+    logActivity('Order Placed', '', payload.customer.shop, 'Rs ' + grandTotal.toLocaleString('en-IN') + ', ' + totalQty + ' pcs');
   }).catch(function(err){
     console.error('Order submission failed:', err);
   });
