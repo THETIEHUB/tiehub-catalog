@@ -687,6 +687,27 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
   .po-acts{flex-wrap:wrap;gap:0.4rem;padding:0.8rem}
   .po-acts button{flex:1;min-width:46%;font-size:0.65rem;padding:0.55rem}
 
+  /* Employee browsing header (Bulk Order / Upload PDF / Order / Back to Dashboard):
+     was one non-wrapping row that ran off the right edge and made phones zoom the page out.
+     Now: search on its own row, then buttons wrap two per row. */
+  html,body{overflow-x:clip}
+  .header-right{flex-wrap:wrap;gap:0.5rem}
+  .header-right .search-wrap{flex:1 1 100%}
+  .header-right .search-inp{width:100%}
+  .header-right .export-pdf-btn,.header-right .order-btn{flex:1 1 calc(50% - 0.5rem);justify-content:center;text-align:center;white-space:normal;line-height:1.25;margin:0}
+  .header-right .acct-btn{flex:1 1 100%;justify-content:center;min-height:42px}
+
+  /* Employee dashboard on phones: 7 tabs scroll sideways (with a hint), bigger buttons and text */
+  .emp-tabbar{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .emp-tabbar::-webkit-scrollbar{display:none}
+  .emp-tab{flex:0 0 auto;white-space:nowrap;padding:0.8rem 1rem;font-size:0.72rem;letter-spacing:0.12em}
+  .emp-tabbar.tabs-more::after{content:'›';position:sticky;right:0;flex:0 0 34px;margin-left:-34px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:var(--gold);font-size:1.4rem;background:linear-gradient(to right,rgba(250,246,239,0),var(--cream) 70%);pointer-events:none}
+  .emp-filter-btn,.oc-btn,#page-emp button{font-size:0.72rem;min-height:40px}
+  .emp-filter-btn,.oc-btn{padding:0.6rem 0.9rem}
+  .oc-meta{font-size:0.74rem}
+  #emp-role-lbl,#emp-stats-lbl{font-size:0.74rem !important}
+  .oc-status{font-size:0.7rem !important;padding:3px 8px}
+
   /* ===== MOBILE POLISH PASS =====
      4. nothing smaller than ~11px; 5. tap targets ~40px; 6. 16px fields so
      iPhones don't zoom on focus; 7. scroll hint on the category menu. */
@@ -1056,7 +1077,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     </div>
 
     <!-- Tabs -->
-    <div style="display:flex;gap:0;margin-bottom:1.5rem;border-bottom:1px solid var(--border)">
+    <div class="emp-tabbar" style="display:flex;gap:0;margin-bottom:1.5rem;border-bottom:1px solid var(--border)">
       <button class="emp-tab active" id="etab-orders" onclick="switchEmpTab('orders')">Order Queue</button>
       <button class="emp-tab" id="etab-customers" onclick="switchEmpTab('customers')">My Customers</button>
       <button class="emp-tab" id="etab-payments" onclick="switchEmpTab('payments')">Payments</button>
@@ -2434,6 +2455,24 @@ function todayISO() {
 if ('serviceWorker' in navigator && location.protocol === 'https:' && /github.io$/.test(location.hostname)) {
   window.addEventListener('load', function() { navigator.serviceWorker.register('sw.js').catch(function() {}); });
 }
+
+(function setupTabsMoreHint() {
+  function update() {
+    var bar = document.querySelector('.emp-tabbar');
+    if (!bar) return;
+    var more = window.innerWidth <= 640 && (bar.scrollWidth - bar.clientWidth - bar.scrollLeft) > 8;
+    bar.classList.toggle('tabs-more', more);
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    var bar = document.querySelector('.emp-tabbar');
+    if (!bar) return;
+    bar.addEventListener('scroll', update, {passive: true});
+    new MutationObserver(update).observe(bar, {attributes: true, childList: true, subtree: true});
+    window.addEventListener('resize', update);
+    setTimeout(update, 800);
+    setInterval(update, 2000);
+  });
+})();
 
 (function setupNavMoreHint() {
   function update() {
@@ -4914,7 +4953,7 @@ function doLogin() {
     if (data.ok && data.profile) {
       // EMPLOYEE LOGIN SUCCESS
       EMP_PROFILE = data.profile;
-      try { sessionStorage.setItem('tth_emp', JSON.stringify(data.profile)); } catch(e){}
+      saveEmpSession(data.profile);
       logActivity('Employee Login', '', '', '');
       var ls = document.getElementById('login-screen');
       ls.style.opacity = '0'; ls.style.transition = 'opacity 0.4s';
@@ -5041,7 +5080,7 @@ function doEmpLogin(user, pwd) {
     btn.disabled = false;
     if (data.ok && data.profile) {
       EMP_PROFILE = data.profile;
-      try { sessionStorage.setItem('tth_emp', JSON.stringify(data.profile)); } catch(e){}
+      saveEmpSession(data.profile);
       var ls = document.getElementById('login-screen');
       ls.style.opacity = '0'; ls.style.transition = 'opacity 0.4s';
       setTimeout(function(){ ls.style.display = 'none'; }, 400);
@@ -7543,7 +7582,7 @@ function doLogout() {
   EMP_PROFILE = null;
   if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
   try { sessionStorage.removeItem('tth_profile'); } catch(e) {}
-  try { sessionStorage.removeItem('tth_emp'); } catch(e) {}
+  clearEmpSession();
   try { sessionStorage.removeItem('tth_session_id'); } catch(e) {} // next login = a genuinely new visit
   hideEmpBrowsingBanner();
   if (wasEmployee) { cart = {}; try { saveCart(); } catch(e) {} }
@@ -7677,6 +7716,46 @@ function loadOrderHistory(gstin) {
   });
 }
 
+// ===== STAY SIGNED IN (employees) =====
+// The employee profile (no password) is also kept in localStorage for 30 days
+// so the installed app / site doesn't ask for the password every time. On
+// every re-open the server is asked for the person's CURRENT permissions; if
+// they were removed from the Employees sheet they are signed out. Sign Out
+// clears everything. Customers are unchanged (session only).
+var EMP_KEEP_DAYS = 30;
+function saveEmpSession(profile) {
+  try { sessionStorage.setItem('tth_emp', JSON.stringify(profile)); } catch(e) {}
+  try { localStorage.setItem('tth_emp_keep', JSON.stringify({profile: profile, exp: Date.now() + EMP_KEEP_DAYS * 86400000})); } catch(e) {}
+}
+function clearEmpSession() {
+  try { sessionStorage.removeItem('tth_emp'); } catch(e) {}
+  try { localStorage.removeItem('tth_emp_keep'); } catch(e) {}
+}
+function readKeptEmpSession() {
+  try {
+    var raw = localStorage.getItem('tth_emp_keep'); if (!raw) return null;
+    var k = JSON.parse(raw);
+    if (!k || !k.profile || !k.profile.role || !k.exp || k.exp < Date.now()) { localStorage.removeItem('tth_emp_keep'); return null; }
+    return k.profile;
+  } catch(e) { return null; }
+}
+function revalidateKeptEmployee(profile) {
+  fetch(BACKEND_URL + '?action=get_emp_access&_t=' + encodeURIComponent(BACKEND_TOKEN)
+    + '&emp_id=' + encodeURIComponent(profile.emp_id || '') + '&emp_name=' + encodeURIComponent(profile.name || ''))
+    .then(function(r){ return r.json(); }).then(function(d) {
+      if (!d || !d.ok) return; // network/backend hiccup — keep working with what we have
+      if (!d.found) { clearEmpSession(); location.reload(); return; } // removed from the Employees sheet
+      var changed = profile.role !== (d.role || profile.role) || profile.fullAccess !== d.fullAccess || JSON.stringify(profile.tabs) !== JSON.stringify(d.tabs);
+      profile.role = d.role || profile.role;
+      profile.fullAccess = d.fullAccess;
+      profile.tabs = d.tabs;
+      EMP_PROFILE = profile;
+      saveEmpSession(profile);
+      // Only redraw the dashboard header/tabs if something actually changed since last sign-in.
+      if (changed) { try { showEmpDashboard(profile); } catch(e) {} }
+    }).catch(function(){});
+}
+
 // Check session on page load
 (function checkAuth() {
   if (window._fbvActive) return; // flipbook link — skip login entirely, nothing else on this page matters
@@ -7684,6 +7763,11 @@ function loadOrderHistory(gstin) {
   // Employee session takes priority
   var empProfile = null;
   try { var se = sessionStorage.getItem('tth_emp'); if (se) empProfile = JSON.parse(se); } catch(e) {}
+  var restoredFromKeep = false;
+  if (!(empProfile && empProfile.role)) {
+    var kept = readKeptEmpSession();
+    if (kept) { empProfile = kept; restoredFromKeep = true; try { sessionStorage.setItem('tth_emp', JSON.stringify(kept)); } catch(e) {} }
+  }
   if (empProfile && empProfile.role) {
     EMP_PROFILE = empProfile;
     // Clear customer session to avoid conflict
@@ -7691,6 +7775,7 @@ function loadOrderHistory(gstin) {
     var ls = document.getElementById('login-screen');
     if (ls) ls.style.display = 'none';
     showEmpDashboard(empProfile);
+    if (restoredFromKeep) revalidateKeptEmployee(empProfile);
     // No separate product refresh needed here — checkAuth runs before
     // loadDataFromBackend's DOMContentLoaded handler, so EMP_PROFILE is
     // already set by the time that fetch fires and picks this up itself.
