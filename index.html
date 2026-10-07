@@ -326,9 +326,11 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .pcard-price-sale .pcard-price-cur{color:#3A8A5E}
 .pcard-stock{font-family:var(--f-ui);font-size:0.6rem;color:var(--ink);font-weight:700;letter-spacing:0.1em;margin-top:4px;text-transform:uppercase}
 .pcard-loc{font-family:var(--f-ui);font-size:0.56rem;color:var(--muted2);margin-top:2px;letter-spacing:0.01em}
-.pcard-buy{font-family:var(--f-ui);font-size:0.56rem;color:var(--muted2);margin-top:3px;letter-spacing:0.01em;line-height:1.35}
-.pcard-incoming{font-family:var(--f-ui);font-size:0.58rem;margin-top:4px;padding:3px 6px;background:#E8F3EA;color:#1F6B3A;border-radius:2px;line-height:1.35}
-.pcard-overdue{font-family:var(--f-ui);font-size:0.58rem;margin-top:4px;padding:3px 6px;background:#FBF0D9;color:#8A5A00;border-radius:2px;line-height:1.35}
+.pcard-buy{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin-top:7px;padding:5px 8px;background:#F5EEDC;border:1px solid #E3D6B4;border-radius:2px;font-family:var(--f-ui);font-size:0.72rem;color:var(--ink);line-height:1.35}
+.pcard-buy-grp{font-weight:600;background:#8B6F1F;color:#fff;padding:1px 7px;border-radius:2px;font-size:0.68rem;letter-spacing:0.04em;white-space:nowrap}
+.pcard-buy-none{color:var(--muted2)}
+.pcard-incoming{font-family:var(--f-ui);font-size:0.72rem;font-weight:500;margin-top:5px;padding:5px 8px;background:#E8F3EA;color:#1F6B3A;border:1px solid #C7E1CE;border-radius:2px;line-height:1.35}
+.pcard-overdue{font-family:var(--f-ui);font-size:0.72rem;font-weight:500;margin-top:5px;padding:5px 8px;background:#FBF0D9;color:#8A5A00;border:1px solid #EBD39B;border-radius:2px;line-height:1.35}
 
 /* ===== GIFT SET BUILDER ===== */
 .gs-step-label{font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);font-weight:600;margin:1.4rem 0 0.6rem}
@@ -1249,6 +1251,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
     <button class="export-pdf-btn" onclick="shareFilteredOnWhatsApp()" title="Share current view on WhatsApp" style="background:#25D366">📱 WhatsApp</button>
     <button class="export-pdf-btn" id="toolbar-bulk-order-btn" onclick="openBulkImport()" title="Upload Excel file to bulk-add products">⬆ Bulk Order</button>
     <button class="export-pdf-btn" onclick="openGiftSetBuilder()" title="Pick 2, 3, or 4 pieces to build a coordinated gift set" style="background:#8B6F1F">🎁 Build a Gift Set</button>
+    <button class="export-pdf-btn" id="purchase-rules-btn" onclick="openPurchaseSettings()" title="Edit the purchase-data rules and recalculate (Full Access only)" style="display:none;background:#5B4A1A">⚙ Purchase rules and refresh</button>
     <div class="nav-item" style="height:auto">
       <button class="export-pdf-btn" onclick="toggleDownloadDropdown(event)" title="Download current products (or just the ticked ones, if any) as Excel, PDF, or Flipbook" style="background:#3D3830">⬇ Download ▾</button>
       <div class="dropdown" id="download-dropdown" style="min-width:180px">
@@ -1320,6 +1323,26 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         </div>
       </div>
 
+      <!-- PRODUCT GROUP — visible to any logged-in employee (enforced
+           server-side in Code.gs), hidden from customers browsing without
+           an employee login; no separate permission check needed here on
+           top of that. -->
+      <div class="filter-group" id="group-filter-group" style="display:none">
+        <div class="fg-head" onclick="toggleFilterGroup(this)">
+          <span>Final Group</span><span class="fg-arrow">−</span>
+        </div>
+        <div class="fg-body" id="filter-groups"></div>
+      </div>
+
+      <!-- INCOMING STOCK — open APPROVED purchase-order lines (employees
+           only; the data is only sent to logged-in employees). -->
+      <div class="filter-group" id="incoming-filter-group" style="display:none">
+        <div class="fg-head" onclick="toggleFilterGroup(this)">
+          <span>Incoming Stock</span><span class="fg-arrow">−</span>
+        </div>
+        <div class="fg-body" id="filter-incoming"></div>
+      </div>
+
       <!-- MATERIAL -->
       <div class="filter-group">
         <div class="fg-head" onclick="toggleFilterGroup(this)">
@@ -1346,26 +1369,6 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
           <span>Pattern</span><span class="fg-arrow">−</span>
         </div>
         <div class="fg-body" id="filter-patterns"></div>
-      </div>
-
-      <!-- PRODUCT GROUP — visible to any logged-in employee (enforced
-           server-side in Code.gs), hidden from customers browsing without
-           an employee login; no separate permission check needed here on
-           top of that. -->
-      <div class="filter-group" id="group-filter-group" style="display:none">
-        <div class="fg-head" onclick="toggleFilterGroup(this)">
-          <span>Final Group</span><span class="fg-arrow">−</span>
-        </div>
-        <div class="fg-body" id="filter-groups"></div>
-      </div>
-
-      <!-- INCOMING STOCK — open APPROVED purchase-order lines (employees
-           only; the data is only sent to logged-in employees). -->
-      <div class="filter-group" id="incoming-filter-group" style="display:none">
-        <div class="fg-head" onclick="toggleFilterGroup(this)">
-          <span>Incoming Stock</span><span class="fg-arrow">−</span>
-        </div>
-        <div class="fg-body" id="filter-incoming"></div>
       </div>
 
       <!-- SALE PRICE — narrower restricted attribute, gated by the "Sale
@@ -2715,6 +2718,10 @@ function buildFilterSidebar() {
     groupGroup.style.display = 'none';
   }
 
+  // Full Access employees get a toolbar button for the purchase rules panel.
+  var rulesBtn = document.getElementById('purchase-rules-btn');
+  if (rulesBtn) rulesBtn.style.display = (EMP_PROFILE && EMP_PROFILE.fullAccess) ? '' : 'none';
+
   // Incoming Stock filter — only when at least one product has open PO lines
   // (so never for customers, who never receive p.up).
   var incomingCount = inCat.filter(function(p){ return incomingInfo(p); }).length;
@@ -3046,11 +3053,12 @@ function cardHTML(p) {
   // approved purchase orders (on-time in green, recently overdue in amber).
   let buyLine = '';
   if (groupOf(p) || p.lp) {
-    const parts = [];
-    if (groupOf(p)) parts.push('Group ' + groupOf(p));
-    if (p.lp) parts.push('Last bought ' + fmtDMY(p.lp.d) + (p.lp.q ? ' · ' + p.lp.q + ' pcs' : ''));
-    else if (groupOf(p)) parts.push('No purchase on record');
-    buyLine = `<div class="pcard-buy">${parts.join(' · ')}</div>`;
+    buyLine = '<div class="pcard-buy">'
+      + (groupOf(p) ? '<span class="pcard-buy-grp">' + groupOf(p) + '</span>' : '')
+      + (p.lp
+          ? '<span>Last bought <b>' + fmtDMY(p.lp.d) + '</b>' + (p.lp.q ? ' · ' + p.lp.q + ' pcs' : '') + '</span>'
+          : '<span class="pcard-buy-none">No purchase on record</span>')
+      + '</div>';
   }
   const inc = incomingInfo(p);
   let incLine = '';
