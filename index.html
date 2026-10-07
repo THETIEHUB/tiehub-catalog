@@ -326,6 +326,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .pcard-price-sale .pcard-price-cur{color:#3A8A5E}
 .pcard-stock{font-family:var(--f-ui);font-size:0.6rem;color:var(--ink);font-weight:700;letter-spacing:0.1em;margin-top:4px;text-transform:uppercase}
 .pcard-loc{font-family:var(--f-ui);font-size:0.56rem;color:var(--muted2);margin-top:2px;letter-spacing:0.01em}
+.tb-dd{position:relative}
+.tb-dd-pop{position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--white);border:1px solid var(--border2);padding:8px 12px;min-width:240px;max-height:340px;overflow:auto;box-shadow:0 8px 24px rgba(60,45,20,0.14)}
 .pcard-buy{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin-top:7px;padding:5px 8px;background:#F5EEDC;border:1px solid #E3D6B4;border-radius:2px;font-family:var(--f-ui);font-size:0.72rem;color:var(--ink);line-height:1.35}
 .pcard-buy-grp{font-weight:600;background:#8B6F1F;color:#fff;padding:1px 7px;border-radius:2px;font-size:0.68rem;letter-spacing:0.04em;white-space:nowrap}
 .pcard-buy-none{color:var(--muted2)}
@@ -1235,6 +1237,16 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <option value="90">90+ pcs</option>
       <option value="100">100+ pcs</option>
     </select>
+    <span class="flbl" id="group-tb-lbl" style="display:none">Final Group:</span>
+    <div class="tb-dd" id="group-tb" style="display:none">
+      <button class="fsel" id="group-tb-btn" type="button" onclick="toggleGroupDD(event)">All groups ▾</button>
+      <div class="tb-dd-pop" id="filter-groups" style="display:none" onclick="event.stopPropagation()"></div>
+    </div>
+    <span class="flbl" id="incoming-tb-lbl" style="display:none">Incoming:</span>
+    <select class="fsel" id="incoming-sel" style="display:none" onchange="renderProducts()">
+      <option value="all">Any</option>
+      <option value="yes">Has incoming stock</option>
+    </select>
     <span class="flbl">View:</span>
     <div class="gridcols-toggle" id="gridcols-toggle">
       <button onclick="setGridCols(1)" data-cols="1" title="1 per row">▌</button>
@@ -1320,26 +1332,6 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
           </div>
           <button id="price-reset-btn" onclick="resetPriceSlider()" style="display:none;margin-top:0.7rem;background:none;border:1px solid var(--border2);color:var(--muted);padding:0.3rem 0.7rem;font-family:var(--f-ui);font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer;font-weight:400;width:100%">✕ Clear Price Filter</button>
         </div>
-      </div>
-
-      <!-- PRODUCT GROUP — visible to any logged-in employee (enforced
-           server-side in Code.gs), hidden from customers browsing without
-           an employee login; no separate permission check needed here on
-           top of that. -->
-      <div class="filter-group" id="group-filter-group" style="display:none">
-        <div class="fg-head" onclick="toggleFilterGroup(this)">
-          <span>Final Group</span><span class="fg-arrow">−</span>
-        </div>
-        <div class="fg-body" id="filter-groups"></div>
-      </div>
-
-      <!-- INCOMING STOCK — open APPROVED purchase-order lines (employees
-           only; the data is only sent to logged-in employees). -->
-      <div class="filter-group" id="incoming-filter-group" style="display:none">
-        <div class="fg-head" onclick="toggleFilterGroup(this)">
-          <span>Incoming Stock</span><span class="fg-arrow">−</span>
-        </div>
-        <div class="fg-body" id="filter-incoming"></div>
       </div>
 
       <!-- MATERIAL -->
@@ -2390,6 +2382,22 @@ function todayISO() {
 }
 // A, B, C first, then D buckets from most to least recently bought
 // (the first number in each label ascends), "no purchase record" last.
+function toggleGroupDD(ev) {
+  ev.stopPropagation();
+  var pop = document.getElementById('filter-groups');
+  pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', function() {
+  var pop = document.getElementById('filter-groups');
+  if (pop) pop.style.display = 'none';
+});
+function updateGroupBtn() {
+  var btn = document.getElementById('group-tb-btn');
+  if (!btn) return;
+  var sel = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(function(i){ return i.value; });
+  btn.textContent = (sel.length === 0 ? 'All groups' : (sel.length === 1 ? sel[0] : sel.length + ' groups selected')) + ' ▾';
+}
+
 function groupRank(label) {
   if (label === 'A') return 0;
   if (label === 'B') return 1;
@@ -2516,8 +2524,8 @@ function getFiltered() {
   if (grpChecked.length) list = list.filter(p => groupOf(p) && grpChecked.includes(groupOf(p)));
 
   // Incoming stock filter — employees only (p.up only exists for them).
-  const incomingEl = document.querySelector('input[name="f-incoming"]');
-  if (incomingEl && incomingEl.checked) list = list.filter(p => incomingInfo(p));
+  const incomingEl = document.getElementById('incoming-sel');
+  if (incomingEl && incomingEl.value === 'yes') list = list.filter(p => incomingInfo(p));
 
   // On Sale filter — same restricted attribute as Product Group.
   const onSaleChecked = document.querySelector('input[name="f-onsale"]') ? document.querySelector('input[name="f-onsale"]').checked : false;
@@ -2644,28 +2652,30 @@ function buildFilterSidebar() {
   // customers, groupCounts is always empty, so this stays hidden — no
   // separate permission check needed on the frontend.
   var checkedGroups = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(function(i){return i.value;});
-  const groupGroup = document.getElementById('group-filter-group');
+  const groupWrap = document.getElementById('group-tb');
+  const groupLbl = document.getElementById('group-tb-lbl');
   if (Object.keys(groupCounts).length > 0) {
-    groupGroup.style.display = 'block';
+    groupWrap.style.display = 'block'; groupLbl.style.display = '';
     document.getElementById('filter-groups').innerHTML =
       Object.entries(groupCounts).sort((a,b)=> groupRank(a[0]) - groupRank(b[0]) || a[0].localeCompare(b[0]))
         .map(([g,c]) => `<label class="fopt"><input type="checkbox" name="f-group" value="${g}" ${checkedGroups.indexOf(g)!==-1?'checked':''} onchange="renderProducts()"> ${g}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
-    groupGroup.style.display = 'none';
+    groupWrap.style.display = 'none'; groupLbl.style.display = 'none';
   }
+  updateGroupBtn();
 
-  // Incoming Stock filter — only when at least one product has open PO lines
-  // (so never for customers, who never receive p.up).
+  // Incoming stock: toolbar select, only shown when some product has open PO lines
   var incomingCount = inCat.filter(function(p){ return incomingInfo(p); }).length;
-  var checkedIncoming = document.querySelector('input[name="f-incoming"]') ? document.querySelector('input[name="f-incoming"]').checked : false;
-  const incomingGroup = document.getElementById('incoming-filter-group');
-  if (incomingCount > 0) {
-    incomingGroup.style.display = 'block';
-    document.getElementById('filter-incoming').innerHTML =
-      `<label class="fopt"><input type="checkbox" name="f-incoming" ${checkedIncoming?'checked':''} onchange="renderProducts()"> Has incoming stock<span class="fopt-count">${incomingCount}</span></label>`;
-  } else {
-    incomingGroup.style.display = 'none';
+  var incSel = document.getElementById('incoming-sel');
+  var incLbl = document.getElementById('incoming-tb-lbl');
+  if (incSel) {
+    if (incomingCount > 0) {
+      incSel.style.display = ''; incLbl.style.display = '';
+      incSel.options[1].textContent = 'Has incoming stock (' + incomingCount + ')';
+    } else {
+      incSel.style.display = 'none'; incLbl.style.display = 'none'; incSel.value = 'all';
+    }
   }
 
   // Show Sale Price filter ONLY if the backend actually sent this data —
@@ -2713,7 +2723,8 @@ function buildFilterSidebar() {
 }
 
 function clearFilters() {
-  document.querySelectorAll('.filter-sidebar input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('.filter-sidebar input[type="checkbox"], #filter-groups input[type="checkbox"]').forEach(cb => cb.checked = false);
+  var incReset = document.getElementById('incoming-sel'); if (incReset) incReset.value = 'all';
   resetPriceSlider();
   renderProducts();
 }
@@ -2893,9 +2904,11 @@ function renderActiveFilters() {
   document.querySelectorAll('input[name="f-onsale"]:checked').forEach(cb => {
     chips.push({type:'onsale', value:'on', label:'On Sale', el:cb});
   });
-  document.querySelectorAll('input[name="f-incoming"]:checked').forEach(cb => {
-    chips.push({type:'incoming', value:'on', label:'Incoming stock', el:cb});
-  });
+  const incChipSel = document.getElementById('incoming-sel');
+  if (incChipSel && incChipSel.value === 'yes') {
+    chips.push({type:'incoming', value:'on', label:'Incoming stock', reset: function(){ incChipSel.value = 'all'; }});
+  }
+  updateGroupBtn();
   document.querySelectorAll('input[name="f-size"]:checked').forEach(cb => {
     chips.push({type:'size', value:cb.value, label:cb.value, el:cb});
   });
