@@ -310,7 +310,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .pcard-img img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;transition:transform 0.5s}
 .pcard:hover .pcard-img img{transform:scale(1.05)}
 .pcard-nophoto{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:2rem;color:var(--border2);gap:4px;font-family:var(--f-display)}
-.badge-row{position:absolute;top:8px;left:8px;display:flex;gap:4px;flex-wrap:wrap}
+.badge-row{position:absolute;top:8px;left:34px;display:flex;gap:4px;flex-wrap:wrap}
 .badge{font-family:var(--f-ui);font-size:0.55rem;letter-spacing:0.18em;text-transform:uppercase;padding:3px 8px;font-weight:500}
 .b-low{background:rgba(139,111,31,0.92);color:#fff}
 .b-oos{background:rgba(139,46,42,0.92);color:#fff}
@@ -326,10 +326,11 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .pcard-price-sale .pcard-price-cur{color:#3A8A5E}
 .pcard-stock{font-family:var(--f-ui);font-size:0.6rem;color:var(--ink);font-weight:700;letter-spacing:0.1em;margin-top:4px;text-transform:uppercase}
 .pcard-loc{font-family:var(--f-ui);font-size:0.56rem;color:var(--muted2);margin-top:2px;letter-spacing:0.01em}
+.tb-pair{display:inline-flex;align-items:center;gap:0.5rem;flex:0 0 auto}
 .tb-dd{position:relative}
 .tb-dd-pop{position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--white);border:1px solid var(--border2);padding:8px 12px;min-width:240px;max-height:340px;overflow:auto;box-shadow:0 8px 24px rgba(60,45,20,0.14)}
 .pcard-buy{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin-top:7px;padding:5px 8px;background:#F5EEDC;border:1px solid #E3D6B4;border-radius:2px;font-family:var(--f-ui);font-size:0.72rem;color:var(--ink);line-height:1.35}
-.pcard-buy-grp{font-weight:600;background:#8B6F1F;color:#fff;padding:1px 7px;border-radius:2px;font-size:0.68rem;letter-spacing:0.04em;white-space:nowrap}
+.pcard-buy-grp{font-weight:600;background:#8B6F1F;color:#fff;padding:1px 7px;border-radius:2px;font-size:0.68rem;letter-spacing:0.04em;max-width:100%;overflow-wrap:anywhere}
 .pcard-buy-none{color:var(--muted2)}
 .pcard-incoming{font-family:var(--f-ui);font-size:0.72rem;font-weight:500;margin-top:5px;padding:5px 8px;background:#E8F3EA;color:#1F6B3A;border:1px solid #C7E1CE;border-radius:2px;line-height:1.35}
 .pcard-overdue{font-family:var(--f-ui);font-size:0.72rem;font-weight:500;margin-top:5px;padding:5px 8px;background:#FBF0D9;color:#8A5A00;border:1px solid #EBD39B;border-radius:2px;line-height:1.35}
@@ -678,6 +679,44 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
   .po-acts{flex-wrap:wrap;gap:0.4rem;padding:0.8rem}
   .po-acts button{flex:1;min-width:46%;font-size:0.65rem;padding:0.55rem}
 
+  /* ===== MOBILE POLISH PASS =====
+     4. nothing smaller than ~11px; 5. tap targets ~40px; 6. 16px fields so
+     iPhones don't zoom on focus; 7. scroll hint on the category menu. */
+  .brand-sub{font-size:0.62rem;letter-spacing:0.2em}
+  .order-btn,.nav-link,.back-btn,.mobile-filter-btn,.export-pdf-btn,.cf-cancel,.cf-confirm{font-size:0.72rem;letter-spacing:0.12em}
+  .order-badge{font-size:0.7rem;width:20px;height:20px}
+  .nav-chevron{font-size:0.7rem}
+  .flbl,.ch-eye,.ch-lbl,.hero-ey,.section-ey,.cat-cnt,.stat-l,.login-label,.login-brand-sub,.login-footer{font-size:0.7rem;letter-spacing:0.12em}
+  .pcard-sku,.pcard-stock,.pcard-loc,.badge,.fopt-count{font-size:0.68rem}
+  .pcard-cat{font-size:0.78rem}
+  .pcard-buy,.pcard-incoming,.pcard-overdue{font-size:0.74rem}
+  .fsel{font-size:1rem;min-height:42px;padding:0.4rem 0.6rem}
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),select,textarea{font-size:16px !important}
+  .gridcols-toggle button{min-height:42px;min-width:40px;padding:0.5rem 0.8rem}
+  .back-btn{min-height:40px;align-items:center}
+  .mobile-filter-btn,.export-pdf-btn,.order-btn,.add-btn{min-height:42px}
+  .add-btn{padding:0.55rem 1rem;font-size:0.7rem}
+  .login-eye{min-width:40px;min-height:40px;font-size:1.2rem;right:4px}
+  .fopt{padding:0.4rem 0}
+  .tb-pair{flex:1 1 auto}
+  .tb-pair .fsel{flex:1 1 auto}
+  .tb-dd-pop{min-width:min(280px,86vw)}
+  .mainnav.nav-more::after{content:'›';position:sticky;right:0;flex:0 0 34px;margin-left:-34px;height:100%;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:var(--gold);font-size:1.4rem;background:linear-gradient(to right,rgba(250,246,239,0),var(--cream) 70%);pointer-events:none}
+
+  .brand-sub{font-size:0.7rem !important}
+  #result-info{font-size:0.72rem !important}
+  .fs-clear{font-size:0.75rem;min-height:40px;padding:0 0.6rem}
+  #fs-close-btn{min-width:40px;min-height:40px}
+  .fg-head span{font-size:0.72rem}
+  .filter-sidebar .fg-body div[style*="font-size:0.5rem"]{font-size:0.7rem !important}
+  .filter-sidebar .fg-body span[style*="font-size:0.65rem"]{font-size:0.78rem !important}
+  #price-input-min,#price-input-max{min-height:36px}
+  .filter-sidebar .fg-body > div > div:nth-child(3) span,#price-scale-mid,#price-scale-max{font-size:0.7rem}
+  .pcard-img div[style*="bottom:4px"]{font-size:0.68rem !important}
+  .noimg,.pcard-nophoto span{font-size:0.7rem !important}
+  .lm-btn{min-height:44px}
+  div:has(> #price-scale-mid) > span{font-size:0.7rem !important}
+
   /* Order form inside panel — stack rows */
   .fi-row{grid-template-columns:1fr !important;gap:0.5rem !important}
   .fi-row > div{grid-column:1 !important}
@@ -687,7 +726,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 @media(max-width:380px){
   .brand-name{font-size:1.15rem}
   .brand-logo-img{height:30px}
-  .search-inp{width:90px}
+  .search-inp{width:100%}
   .hero-h{font-size:1.7rem}
   .hero-stats{gap:0.9rem}
   .stat-n{font-size:1.3rem}
@@ -1212,7 +1251,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
   <div class="toolbar">
     <button class="back-btn" onclick="goHome()">← Back to Home</button>
     <button class="mobile-filter-btn" onclick="toggleMobileFilters()">⚲ Filters</button>
-    <span class="flbl">Sort:</span>
+    <span class="tb-pair"><span class="flbl">Sort:</span>
     <select class="fsel" id="sort-sel" onchange="renderProducts()">
       <option value="default">Default</option>
       <option value="price-asc">Price ↑</option>
@@ -1221,8 +1260,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <option value="sku">SKU A–Z</option>
       <option value="sku-desc">SKU Z–A</option>
       <option value="saleprice-asc">Sale Price ↑</option>
-    </select>
-    <span class="flbl">Min Stock:</span>
+    </select></span>
+    <span class="tb-pair"><span class="flbl">Min Stock:</span>
     <select class="fsel" id="stock-sel" onchange="renderProducts()">
       <option value="all">Any Stock</option>
       <option value="in">In Stock (1+)</option>
@@ -1236,17 +1275,17 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
       <option value="80">80+ pcs</option>
       <option value="90">90+ pcs</option>
       <option value="100">100+ pcs</option>
-    </select>
-    <span class="flbl" id="group-tb-lbl" style="display:none">Final Group:</span>
-    <div class="tb-dd" id="group-tb" style="display:none">
-      <button class="fsel" id="group-tb-btn" type="button" onclick="toggleGroupDD(event)">All groups ▾</button>
-      <div class="tb-dd-pop" id="filter-groups" style="display:none" onclick="event.stopPropagation()"></div>
-    </div>
-    <span class="flbl" id="incoming-tb-lbl" style="display:none">Incoming:</span>
-    <select class="fsel" id="incoming-sel" style="display:none" onchange="renderProducts()">
-      <option value="all">Any</option>
-      <option value="yes">Has incoming stock</option>
-    </select>
+    </select></span>
+    <span class="tb-pair" id="group-tb-pair" style="display:none"><span class="flbl">Final Group:</span>
+      <div class="tb-dd" id="group-tb">
+        <button class="fsel" id="group-tb-btn" type="button" onclick="toggleGroupDD(event)">All groups ▾</button>
+        <div class="tb-dd-pop" id="filter-groups" style="display:none" onclick="event.stopPropagation()"></div>
+      </div></span>
+    <span class="tb-pair" id="incoming-tb-pair" style="display:none"><span class="flbl">Incoming:</span>
+      <select class="fsel" id="incoming-sel" onchange="renderProducts()">
+        <option value="all">Any</option>
+        <option value="yes">Has incoming stock</option>
+      </select></span>
     <span class="flbl">View:</span>
     <div class="gridcols-toggle" id="gridcols-toggle">
       <button onclick="setGridCols(1)" data-cols="1" title="1 per row">▌</button>
@@ -2382,6 +2421,24 @@ function todayISO() {
 }
 // A, B, C first, then D buckets from most to least recently bought
 // (the first number in each label ascends), "no purchase record" last.
+(function setupNavMoreHint() {
+  function update() {
+    var nav = document.querySelector('.mainnav');
+    if (!nav) return;
+    var more = window.innerWidth <= 640 && (nav.scrollWidth - nav.clientWidth - nav.scrollLeft) > 8;
+    nav.classList.toggle('nav-more', more);
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    var nav = document.querySelector('.mainnav');
+    if (!nav) return;
+    nav.addEventListener('scroll', update, {passive: true});
+    new MutationObserver(update).observe(nav, {childList: true, subtree: true});
+    window.addEventListener('resize', update);
+    update();
+    setTimeout(update, 1500);
+  });
+})();
+
 function toggleGroupDD(ev) {
   ev.stopPropagation();
   var pop = document.getElementById('filter-groups');
@@ -2652,10 +2709,10 @@ function buildFilterSidebar() {
   // customers, groupCounts is always empty, so this stays hidden — no
   // separate permission check needed on the frontend.
   var checkedGroups = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(function(i){return i.value;});
-  const groupWrap = document.getElementById('group-tb');
-  const groupLbl = document.getElementById('group-tb-lbl');
+  const groupWrap = document.getElementById('group-tb-pair');
+  const groupLbl = groupWrap;
   if (Object.keys(groupCounts).length > 0) {
-    groupWrap.style.display = 'block'; groupLbl.style.display = '';
+    groupWrap.style.display = '';
     document.getElementById('filter-groups').innerHTML =
       Object.entries(groupCounts).sort((a,b)=> groupRank(a[0]) - groupRank(b[0]) || a[0].localeCompare(b[0]))
         .map(([g,c]) => `<label class="fopt"><input type="checkbox" name="f-group" value="${g}" ${checkedGroups.indexOf(g)!==-1?'checked':''} onchange="renderProducts()"> ${g}<span class="fopt-count">${c}</span></label>`)
@@ -2668,7 +2725,7 @@ function buildFilterSidebar() {
   // Incoming stock: toolbar select, only shown when some product has open PO lines
   var incomingCount = inCat.filter(function(p){ return incomingInfo(p); }).length;
   var incSel = document.getElementById('incoming-sel');
-  var incLbl = document.getElementById('incoming-tb-lbl');
+  var incLbl = document.getElementById('incoming-tb-pair');
   if (incSel) {
     if (incomingCount > 0) {
       incSel.style.display = ''; incLbl.style.display = '';
@@ -3029,7 +3086,7 @@ function cardHTML(p) {
     <div class="pcard-body">
       <div class="pcard-sku">${p.sku}</div>
       <div class="pcard-cat">${p.cat}</div>
-      <div class="pcard-foot"><div><div class="pcard-price-row"><div class="pcard-price"><span class="pcard-price-cur">Rs</span>${p.mrp.toLocaleString('en-IN')}</div>${(p.sale_price !== undefined && p.sale_price !== null) ? '<div class="pcard-price pcard-price-sale"><span class="pcard-price-cur">Sale Rs</span>'+p.sale_price.toLocaleString('en-IN')+'</div>' : ''}</div>${stockLine}${locLine}${buyLine}${incLine}</div>${action}</div>
+      <div class="pcard-foot"><div><div class="pcard-price-row"><div class="pcard-price"><span class="pcard-price-cur">Rs</span>${p.mrp.toLocaleString('en-IN')}</div>${(p.sale_price !== undefined && p.sale_price !== null) ? '<div class="pcard-price pcard-price-sale"><span class="pcard-price-cur">Sale Rs</span>'+p.sale_price.toLocaleString('en-IN')+'</div>' : ''}</div>${stockLine}${locLine}</div>${action}</div>${buyLine}${incLine}
     </div>
   </div>`;
 }
