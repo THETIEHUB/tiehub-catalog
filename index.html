@@ -326,6 +326,9 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .pcard-price-sale .pcard-price-cur{color:#3A8A5E}
 .pcard-stock{font-family:var(--f-ui);font-size:0.6rem;color:var(--ink);font-weight:700;letter-spacing:0.1em;margin-top:4px;text-transform:uppercase}
 .pcard-loc{font-family:var(--f-ui);font-size:0.56rem;color:var(--muted2);margin-top:2px;letter-spacing:0.01em}
+.pcard-buy{font-family:var(--f-ui);font-size:0.56rem;color:var(--muted2);margin-top:3px;letter-spacing:0.01em;line-height:1.35}
+.pcard-incoming{font-family:var(--f-ui);font-size:0.58rem;margin-top:4px;padding:3px 6px;background:#E8F3EA;color:#1F6B3A;border-radius:2px;line-height:1.35}
+.pcard-overdue{font-family:var(--f-ui);font-size:0.58rem;margin-top:4px;padding:3px 6px;background:#FBF0D9;color:#8A5A00;border-radius:2px;line-height:1.35}
 
 /* ===== GIFT SET BUILDER ===== */
 .gs-step-label{font-family:var(--f-ui);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);font-weight:600;margin:1.4rem 0 0.6rem}
@@ -1351,9 +1354,18 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
            top of that. -->
       <div class="filter-group" id="group-filter-group" style="display:none">
         <div class="fg-head" onclick="toggleFilterGroup(this)">
-          <span>Product Group</span><span class="fg-arrow">−</span>
+          <span>Final Group</span><span class="fg-arrow">−</span>
         </div>
         <div class="fg-body" id="filter-groups"></div>
+      </div>
+
+      <!-- INCOMING STOCK — open APPROVED purchase-order lines (employees
+           only; the data is only sent to logged-in employees). -->
+      <div class="filter-group" id="incoming-filter-group" style="display:none">
+        <div class="fg-head" onclick="toggleFilterGroup(this)">
+          <span>Incoming Stock</span><span class="fg-arrow">−</span>
+        </div>
+        <div class="fg-body" id="filter-incoming"></div>
       </div>
 
       <!-- SALE PRICE — narrower restricted attribute, gated by the "Sale
@@ -2362,6 +2374,37 @@ function logActivity(actionType, channel, reference, detail) {
   }).catch(function(){});
 }
 
+// ===== PURCHASE-DERIVED FIELDS (employee-only — the backend never sends
+// p.fg / p.lp / p.up to customers, so everything below is naturally empty
+// for them) =====
+// Open PO lines more than this many days past their delivery date are
+// treated as stale (PO never closed) and ignored rather than shown as incoming.
+var UPCOMING_STALE_DAYS = 90;
+function groupOf(p) { return p.fg || p.product_group || ''; }
+function fmtDMY(iso) { return iso ? iso.slice(8, 10) + '-' + iso.slice(5, 7) + '-' + iso.slice(0, 4) : ''; }
+function todayISO() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function incomingInfo(p) {
+  if (!p.up || !p.up.length) return null;
+  var today = todayISO();
+  var info = {onQty: 0, eta: '', odQty: 0, odSince: ''};
+  p.up.forEach(function(l) {
+    if (!l.d || l.d >= today) {
+      info.onQty += l.q;
+      if (l.d && (!info.eta || l.d < info.eta)) info.eta = l.d;
+    } else {
+      var days = Math.floor((new Date(today + 'T00:00:00') - new Date(l.d + 'T00:00:00')) / 86400000);
+      if (days <= UPCOMING_STALE_DAYS) {
+        info.odQty += l.q;
+        if (!info.odSince || l.d < info.odSince) info.odSince = l.d;
+      }
+    }
+  });
+  return (info.onQty || info.odQty) ? info : null;
+}
+
 // ===== WHATSAPP SHARE FILTERED VIEW =====
 function shareFilteredOnWhatsApp() {
   var items = getFiltered();
@@ -2457,7 +2500,11 @@ function getFiltered() {
   // Product Group filter — only present on the product objects at all for
   // logged-in employees (enforced server-side); hidden for customers.
   const grpChecked = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(i=>i.value);
-  if (grpChecked.length) list = list.filter(p => p.product_group && grpChecked.includes(p.product_group));
+  if (grpChecked.length) list = list.filter(p => groupOf(p) && grpChecked.includes(groupOf(p)));
+
+  // Incoming stock filter — employees only (p.up only exists for them).
+  const incomingEl = document.querySelector('input[name="f-incoming"]');
+  if (incomingEl && incomingEl.checked) list = list.filter(p => incomingInfo(p));
 
   // On Sale filter — same restricted attribute as Product Group.
   const onSaleChecked = document.querySelector('input[name="f-onsale"]') ? document.querySelector('input[name="f-onsale"]').checked : false;
@@ -2544,7 +2591,7 @@ function buildFilterSidebar() {
     (p.pattern || []).forEach(pt => { patternCounts[pt] = (patternCounts[pt] || 0) + 1; });
     (p.size || []).forEach(sz => { sizeCounts[sz] = (sizeCounts[sz] || 0) + 1; });
     (p.color || []).forEach(c => { colorCounts[c] = (colorCounts[c] || 0) + 1; });
-    if (p.product_group) groupCounts[p.product_group] = (groupCounts[p.product_group] || 0) + 1;
+    if (groupOf(p)) groupCounts[groupOf(p)] = (groupCounts[groupOf(p)] || 0) + 1;
   });
 
   // Remember which options were checked before re-render, for every group —
@@ -2588,11 +2635,28 @@ function buildFilterSidebar() {
   if (Object.keys(groupCounts).length > 0) {
     groupGroup.style.display = 'block';
     document.getElementById('filter-groups').innerHTML =
-      Object.entries(groupCounts).sort((a,b)=>a[0].localeCompare(b[0]))
+      Object.entries(groupCounts).sort((a,b)=>{
+        const ORDER = ['A','B','C','D (bought 0-90 days)','D (91-180 days)','D (181-365 days)','D (365+ days)','D (no purchase record)'];
+        const ia = ORDER.indexOf(a[0]), ib = ORDER.indexOf(b[0]);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a[0].localeCompare(b[0]);
+      })
         .map(([g,c]) => `<label class="fopt"><input type="checkbox" name="f-group" value="${g}" ${checkedGroups.indexOf(g)!==-1?'checked':''} onchange="renderProducts()"> ${g}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
     groupGroup.style.display = 'none';
+  }
+
+  // Incoming Stock filter — only when at least one product has open PO lines
+  // (so never for customers, who never receive p.up).
+  var incomingCount = inCat.filter(function(p){ return incomingInfo(p); }).length;
+  var checkedIncoming = document.querySelector('input[name="f-incoming"]') ? document.querySelector('input[name="f-incoming"]').checked : false;
+  const incomingGroup = document.getElementById('incoming-filter-group');
+  if (incomingCount > 0) {
+    incomingGroup.style.display = 'block';
+    document.getElementById('filter-incoming').innerHTML =
+      `<label class="fopt"><input type="checkbox" name="f-incoming" ${checkedIncoming?'checked':''} onchange="renderProducts()"> Has incoming stock<span class="fopt-count">${incomingCount}</span></label>`;
+  } else {
+    incomingGroup.style.display = 'none';
   }
 
   // Show Sale Price filter ONLY if the backend actually sent this data —
@@ -2820,6 +2884,9 @@ function renderActiveFilters() {
   document.querySelectorAll('input[name="f-onsale"]:checked').forEach(cb => {
     chips.push({type:'onsale', value:'on', label:'On Sale', el:cb});
   });
+  document.querySelectorAll('input[name="f-incoming"]:checked').forEach(cb => {
+    chips.push({type:'incoming', value:'on', label:'Incoming stock', el:cb});
+  });
   document.querySelectorAll('input[name="f-size"]:checked').forEach(cb => {
     chips.push({type:'size', value:cb.value, label:cb.value, el:cb});
   });
@@ -2905,6 +2972,24 @@ function cardHTML(p) {
     ? `<div class="pcard-loc">${Object.keys(p.loc).map(k => `${LOC_ABBR[k]||k} ${p.loc[k]}`).join(' · ')}</div>`
     : '';
 
+  // Employee-only purchase info (p.fg / p.lp / p.up are never sent to
+  // customers): final group + last purchased date, and incoming stock from
+  // approved purchase orders (on-time in green, recently overdue in amber).
+  let buyLine = '';
+  if (groupOf(p) || p.lp) {
+    const parts = [];
+    if (groupOf(p)) parts.push('Group ' + groupOf(p));
+    if (p.lp) parts.push('Last bought ' + fmtDMY(p.lp.d) + (p.lp.q ? ' · ' + p.lp.q + ' pcs' : ''));
+    else if (groupOf(p)) parts.push('No purchase on record');
+    buyLine = `<div class="pcard-buy">${parts.join(' · ')}</div>`;
+  }
+  const inc = incomingInfo(p);
+  let incLine = '';
+  if (inc) {
+    if (inc.onQty) incLine += `<div class="pcard-incoming">+${inc.onQty} pcs incoming${inc.eta ? ' · by ' + fmtDMY(inc.eta) : ''}</div>`;
+    if (inc.odQty) incLine += `<div class="pcard-overdue">${inc.odQty} pcs overdue · was due ${fmtDMY(inc.odSince)}</div>`;
+  }
+
   const mtoBadge = raw > 0 ? '<span class="badge b-mto">Made-to-Order</span>' : '';
 
   var isSelected = SELECTED_SKUS.has(p.sku);
@@ -2921,7 +3006,7 @@ function cardHTML(p) {
     <div class="pcard-body">
       <div class="pcard-sku">${p.sku}</div>
       <div class="pcard-cat">${p.cat}</div>
-      <div class="pcard-foot"><div><div class="pcard-price-row"><div class="pcard-price"><span class="pcard-price-cur">Rs</span>${p.mrp.toLocaleString('en-IN')}</div>${(p.sale_price !== undefined && p.sale_price !== null) ? '<div class="pcard-price pcard-price-sale"><span class="pcard-price-cur">Sale Rs</span>'+p.sale_price.toLocaleString('en-IN')+'</div>' : ''}</div>${stockLine}${locLine}</div>${action}</div>
+      <div class="pcard-foot"><div><div class="pcard-price-row"><div class="pcard-price"><span class="pcard-price-cur">Rs</span>${p.mrp.toLocaleString('en-IN')}</div>${(p.sale_price !== undefined && p.sale_price !== null) ? '<div class="pcard-price pcard-price-sale"><span class="pcard-price-cur">Sale Rs</span>'+p.sale_price.toLocaleString('en-IN')+'</div>' : ''}</div>${stockLine}${locLine}${buyLine}${incLine}</div>${action}</div>
     </div>
   </div>`;
 }
@@ -3593,11 +3678,15 @@ function exportCatalogExcel() {
   var items = getExportItems();
   if (!items.length) { alert('No products to export. Adjust your filters.'); return; }
 
-  var showGroup = items.some(function(p){ return p.product_group; }); // present for any logged-in employee
+  var showGroup = items.some(function(p){ return groupOf(p); }); // present for any logged-in employee
+  var showLastBuy = items.some(function(p){ return p.lp; });
+  var showIncoming = items.some(function(p){ return incomingInfo(p); });
   var showLoc = items.some(function(p){ return p.loc; }); // present once the 4 location columns exist in the Products sheet
   var LOC_KEYS = ['Amrut Niwas', 'Chennai Store', 'Juhu Store', 'Kalaghoda Store'];
   var header = ['Category', 'SKU'];
   if (showGroup) header.push('Group');
+  if (showLastBuy) header.push('Last Purchased', 'Last Purchase Qty');
+  if (showIncoming) header.push('Incoming Qty', 'Incoming By', 'Overdue Qty');
   header.push('Qty Available');
   if (showLoc) header = header.concat(LOC_KEYS);
   header.push('Image');
@@ -3605,7 +3694,12 @@ function exportCatalogExcel() {
   var rows = [header];
   items.forEach(function(p){
     var row = [p.cat, p.sku];
-    if (showGroup) row.push(p.product_group || '');
+    if (showGroup) row.push(groupOf(p));
+    if (showLastBuy) row.push(p.lp ? fmtDMY(p.lp.d) : '', p.lp ? p.lp.q : '');
+    if (showIncoming) {
+      var incX = incomingInfo(p);
+      row.push(incX ? incX.onQty : '', incX && incX.eta ? fmtDMY(incX.eta) : '', incX ? incX.odQty : '');
+    }
     row.push(totalAvail(p));
     if (showLoc) LOC_KEYS.forEach(function(k){ row.push(p.loc ? (p.loc[k] || 0) : ''); });
     row.push(p.img || '');
@@ -7756,6 +7850,11 @@ function loadDataFromBackend() {
 // allowed staff. This is the catch-up call that fixes that.
 function refreshProductsForEmployee() {
   if (!EMP_PROFILE || !EMP_PROFILE.name) return;
+  // Keep latest-purchase / final-group / incoming-stock columns in step with
+  // the GRN/PO exports (backend skips this unless the last refresh is 6h+ old).
+  fetch(BACKEND_URL + '?action=refresh_purchase_data_if_stale&_t=' + encodeURIComponent(BACKEND_TOKEN)
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE.name)
+    + '&emp_id=' + encodeURIComponent(EMP_PROFILE.emp_id || '')).catch(function(){});
   fetch(BACKEND_URL + '?action=products&t=' + encodeURIComponent(BACKEND_TOKEN)
     + '&emp_name=' + encodeURIComponent(EMP_PROFILE.name)
     + '&emp_id=' + encodeURIComponent(EMP_PROFILE.emp_id || '')
