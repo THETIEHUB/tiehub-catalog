@@ -2386,6 +2386,79 @@ function todayISO() {
   var d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
+// A, B, C first, then D buckets from most to least recently bought
+// (the first number in each label ascends), "no purchase record" last.
+function groupRank(label) {
+  if (label === 'A') return 0;
+  if (label === 'B') return 1;
+  if (label === 'C') return 2;
+  if (label.indexOf('no purchase record') !== -1) return 9999;
+  var m = label.match(/\d+/);
+  return 10 + (m ? Number(m[0]) : 0);
+}
+
+// ---- Purchase rules + refresh panel (Full Access employees) ----
+function escAttr_(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function openPurchaseSettings() {
+  if (!EMP_PROFILE || !EMP_PROFILE.fullAccess) return;
+  var existing = document.getElementById('purchase-settings-modal');
+  if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = 'purchase-settings-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,22,16,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML = '<div style="background:var(--cream);max-width:640px;width:100%;max-height:92vh;overflow-y:auto;border-top:3px solid #8B6F1F">'
+    + '<div style="padding:1.2rem 1.6rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+    + '<div style="font-family:var(--f-display);font-size:1.2rem;font-weight:500;color:var(--dark)">Purchase data: rules and refresh</div>'
+    + '<button onclick="document.getElementById(\'purchase-settings-modal\').remove()" style="background:none;border:1px solid var(--border2);color:var(--muted);width:30px;height:30px;cursor:pointer;font-size:1.1rem">&times;</button></div>'
+    + '<div id="ps-body" style="padding:1.2rem 1.6rem;font-family:var(--f-ui);font-size:0.78rem;color:var(--ink)">Loading...</div></div>';
+  document.body.appendChild(modal);
+  fetch(BACKEND_URL + '?action=get_purchase_settings&_t=' + encodeURIComponent(BACKEND_TOKEN)
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE.name) + '&emp_id=' + encodeURIComponent(EMP_PROFILE.emp_id || ''))
+    .then(function(r){ return r.json(); }).then(function(d) {
+      var body = document.getElementById('ps-body');
+      if (!body) return;
+      if (!d.ok) { body.textContent = d.error || 'Could not load settings.'; return; }
+      var when = d.refreshedAt ? new Date(d.refreshedAt).toLocaleString('en-GB') : 'never';
+      body.innerHTML = '<div style="color:var(--muted);margin-bottom:12px">Last calculated: <b>' + when + '</b>. The numbers also recalculate automatically on employee login when they are older than the hours set below.</div>'
+        + d.defs.map(function(def) {
+            return '<label style="display:block;margin-bottom:12px"><span style="display:block;margin-bottom:4px;color:var(--muted)">' + escAttr_(def.label) + '</span>'
+              + '<input class="fi" data-ps-key="' + def.key + '" value="' + escAttr_(d.settings[def.key]) + '" style="margin-bottom:0"></label>';
+          }).join('')
+        + '<div id="ps-msg" style="min-height:1.2em;margin:6px 0 10px;font-weight:500"></div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+        + '<button class="oc-btn primary" onclick="savePurchaseSettings(true)">Save and recalculate</button>'
+        + '<button class="oc-btn" onclick="savePurchaseSettings(false)">Save only</button>'
+        + '<button class="oc-btn" onclick="recalcPurchaseNow()">Recalculate now (no changes)</button></div>';
+    }).catch(function(){ var b = document.getElementById('ps-body'); if (b) b.textContent = 'Connection error.'; });
+}
+
+function purchasePanelMsg_(text, ok) {
+  var m = document.getElementById('ps-msg');
+  if (m) { m.textContent = text; m.style.color = ok ? '#1F6B3A' : '#C0392B'; }
+}
+
+function savePurchaseSettings(recalc) {
+  var settings = {};
+  document.querySelectorAll('#purchase-settings-modal [data-ps-key]').forEach(function(el){ settings[el.getAttribute('data-ps-key')] = el.value; });
+  postPurchaseSettings_(settings, recalc);
+}
+function recalcPurchaseNow() { postPurchaseSettings_(null, true); }
+
+function postPurchaseSettings_(settings, recalc) {
+  purchasePanelMsg_(recalc ? 'Saving and recalculating... this can take up to a minute.' : 'Saving...', true);
+  fetch(BACKEND_URL, {
+    method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify({action: 'save_purchase_settings', emp_id: EMP_PROFILE.emp_id || '', emp_name: EMP_PROFILE.name,
+      settings: settings, recalculate: !!recalc, _t: BACKEND_TOKEN})
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    if (!d.ok) { purchasePanelMsg_(d.error || 'Could not save.', false); return; }
+    if (settings && settings.stale_days !== undefined && isFinite(Number(settings.stale_days))) UPCOMING_STALE_DAYS = Number(settings.stale_days);
+    purchasePanelMsg_(recalc ? ('Done. ' + d.withLatestPurchase + ' products have a purchase date, ' + d.withUpcoming + ' have incoming stock.') : 'Saved. Use "Recalculate now" to apply it.', true);
+    if (recalc) refreshProductsForEmployee();
+  }).catch(function(){ purchasePanelMsg_('Connection error. Please try again.', false); });
+}
+
 function incomingInfo(p) {
   if (!p.up || !p.up.length) return null;
   var today = todayISO();
@@ -2635,13 +2708,9 @@ function buildFilterSidebar() {
   if (Object.keys(groupCounts).length > 0) {
     groupGroup.style.display = 'block';
     document.getElementById('filter-groups').innerHTML =
-      Object.entries(groupCounts).sort((a,b)=>{
-        const ORDER = ['A','B','C','D (bought 0-90 days)','D (91-180 days)','D (181-365 days)','D (365+ days)','D (no purchase record)'];
-        const ia = ORDER.indexOf(a[0]), ib = ORDER.indexOf(b[0]);
-        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a[0].localeCompare(b[0]);
-      })
+      Object.entries(groupCounts).sort((a,b)=> groupRank(a[0]) - groupRank(b[0]) || a[0].localeCompare(b[0]))
         .map(([g,c]) => `<label class="fopt"><input type="checkbox" name="f-group" value="${g}" ${checkedGroups.indexOf(g)!==-1?'checked':''} onchange="renderProducts()"> ${g}<span class="fopt-count">${c}</span></label>`)
-        .join('');
+        .join('') + ((EMP_PROFILE && EMP_PROFILE.fullAccess) ? '<a href="#" onclick="openPurchaseSettings();return false" style="display:inline-block;margin-top:8px;font-family:var(--f-ui);font-size:0.62rem;letter-spacing:0.08em;color:var(--gold);text-decoration:underline">Rules and refresh</a>' : '');
   } else {
     groupGroup.style.display = 'none';
   }
@@ -7852,6 +7921,14 @@ function refreshProductsForEmployee() {
   if (!EMP_PROFILE || !EMP_PROFILE.name) return;
   // Keep latest-purchase / final-group / incoming-stock columns in step with
   // the GRN/PO exports (backend skips this unless the last refresh is 6h+ old).
+  fetch(BACKEND_URL + '?action=get_purchase_settings&_t=' + encodeURIComponent(BACKEND_TOKEN)
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE.name) + '&emp_id=' + encodeURIComponent(EMP_PROFILE.emp_id || ''))
+    .then(function(r){ return r.json(); }).then(function(d) {
+      if (d && d.ok && isFinite(d.staleDays) && d.staleDays !== UPCOMING_STALE_DAYS) {
+        UPCOMING_STALE_DAYS = d.staleDays;
+        if (typeof renderProducts === 'function') renderProducts();
+      }
+    }).catch(function(){});
   fetch(BACKEND_URL + '?action=refresh_purchase_data_if_stale&_t=' + encodeURIComponent(BACKEND_TOKEN)
     + '&emp_name=' + encodeURIComponent(EMP_PROFILE.name)
     + '&emp_id=' + encodeURIComponent(EMP_PROFILE.emp_id || '')).catch(function(){});
