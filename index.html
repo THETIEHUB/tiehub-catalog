@@ -338,6 +338,7 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .tb-dd{position:relative}
 .tb-dd-pop{position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--white);border:1px solid var(--border2);padding:8px 12px;min-width:240px;max-height:340px;overflow:auto;box-shadow:0 8px 24px rgba(60,45,20,0.14)}
 .pcard-buy{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin-top:7px;padding:5px 8px;background:#F5EEDC;border:1px solid #E3D6B4;border-radius:2px;font-family:var(--f-ui);font-size:0.72rem;color:var(--ink);line-height:1.35}
+.fopt-all{border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:4px}
 .pcard-buy-grp.new-arr{background:#2E7D4F}
 .fopt .new-arr-tag{color:#2E7D4F;font-weight:600}
 .pcard-buy-grp{font-weight:600;background:#8B6F1F;color:#fff;padding:1px 7px;border-radius:2px;font-size:0.68rem;letter-spacing:0.04em;max-width:100%;overflow-wrap:anywhere}
@@ -2506,11 +2507,23 @@ document.addEventListener('click', function() {
   var pop = document.getElementById('filter-groups');
   if (pop) pop.style.display = 'none';
 });
+function toggleAllGroups(on) {
+  document.querySelectorAll('input[name="f-group"]').forEach(function(cb){ cb.checked = on; });
+  renderProducts();
+}
 function updateGroupBtn() {
+  var all = document.getElementById('group-all');
+  if (all) {
+    var boxes = document.querySelectorAll('input[name="f-group"]');
+    var on = document.querySelectorAll('input[name="f-group"]:checked').length;
+    all.checked = boxes.length > 0 && on === boxes.length;
+    all.indeterminate = on > 0 && on < boxes.length;
+  }
   var btn = document.getElementById('group-tb-btn');
   if (!btn) return;
   var sel = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(function(i){ return i.value; });
-  btn.textContent = (sel.length === 0 ? 'All groups' : (sel.length === 1 ? groupLabel(sel[0]) : sel.length + ' groups selected')) + ' ▾';
+  var totalG = document.querySelectorAll('input[name="f-group"]').length;
+  btn.textContent = (sel.length === 0 || sel.length === totalG ? 'All groups' : (sel.length === 1 ? groupLabel(sel[0]) : sel.length + ' groups selected')) + ' ▾';
 }
 
 function groupRank(label) {
@@ -2772,6 +2785,7 @@ function buildFilterSidebar() {
   if (Object.keys(groupCounts).length > 0) {
     groupWrap.style.display = '';
     document.getElementById('filter-groups').innerHTML =
+      '<label class="fopt fopt-all"><input type="checkbox" id="group-all" onchange="toggleAllGroups(this.checked)"> <b>Select all</b></label>' +
       Object.entries(groupCounts).sort((a,b)=> groupRank(a[0]) - groupRank(b[0]) || a[0].localeCompare(b[0]))
         .map(([g,c]) => `<label class="fopt"><input type="checkbox" name="f-group" value="${g}" ${checkedGroups.indexOf(g)!==-1?'checked':''} onchange="renderProducts()"> ${isNewArrival(g) ? '<span class="new-arr-tag">✨ New Arrival</span>' : g}<span class="fopt-count">${c}</span></label>`)
         .join('');
@@ -3014,7 +3028,7 @@ function renderActiveFilters() {
     chips.push({type:'pattern', value:cb.value, label:cb.value, el:cb});
   });
   document.querySelectorAll('input[name="f-group"]:checked').forEach(cb => {
-    chips.push({type:'group', value:cb.value, label:'Group ' + cb.value, el:cb});
+    chips.push({type:'group', value:cb.value, label:'Group ' + groupLabel(cb.value), el:cb});
   });
   document.querySelectorAll('input[name="f-onsale"]:checked').forEach(cb => {
     chips.push({type:'onsale', value:'on', label:'On Sale', el:cb});
