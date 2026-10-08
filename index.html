@@ -338,6 +338,8 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
 .tb-dd{position:relative}
 .tb-dd-pop{position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--white);border:1px solid var(--border2);padding:8px 12px;min-width:240px;max-height:340px;overflow:auto;box-shadow:0 8px 24px rgba(60,45,20,0.14)}
 .pcard-buy{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin-top:7px;padding:5px 8px;background:#F5EEDC;border:1px solid #E3D6B4;border-radius:2px;font-family:var(--f-ui);font-size:0.72rem;color:var(--ink);line-height:1.35}
+.pcard-buy-grp.new-arr{background:#2E7D4F}
+.fopt .new-arr-tag{color:#2E7D4F;font-weight:600}
 .pcard-buy-grp{font-weight:600;background:#8B6F1F;color:#fff;padding:1px 7px;border-radius:2px;font-size:0.68rem;letter-spacing:0.04em;max-width:100%;overflow-wrap:anywhere}
 .pcard-buy-none{color:var(--muted2)}
 .pcard-incoming{font-family:var(--f-ui);font-size:0.72rem;font-weight:500;margin-top:5px;padding:5px 8px;background:#E8F3EA;color:#1F6B3A;border:1px solid #C7E1CE;border-radius:2px;line-height:1.35}
@@ -2443,6 +2445,9 @@ function logActivity(actionType, channel, reference, detail) {
 // treated as stale (PO never closed) and ignored rather than shown as incoming.
 var UPCOMING_STALE_DAYS = 90;
 function groupOf(p) { return p.fg || p.product_group || ''; }
+// D bought in the last 0-N days is shown to staff as "New Arrival" (filter value stays the raw label)
+function groupLabel(g) { return /^D \(bought 0-/.test(g || '') ? 'New Arrival' : (g || ''); }
+function isNewArrival(g) { return groupLabel(g) === 'New Arrival'; }
 function fmtDMY(iso) { return iso ? iso.slice(8, 10) + '-' + iso.slice(5, 7) + '-' + iso.slice(0, 4) : ''; }
 function todayISO() {
   var d = new Date();
@@ -2505,7 +2510,7 @@ function updateGroupBtn() {
   var btn = document.getElementById('group-tb-btn');
   if (!btn) return;
   var sel = Array.from(document.querySelectorAll('input[name="f-group"]:checked')).map(function(i){ return i.value; });
-  btn.textContent = (sel.length === 0 ? 'All groups' : (sel.length === 1 ? sel[0] : sel.length + ' groups selected')) + ' ▾';
+  btn.textContent = (sel.length === 0 ? 'All groups' : (sel.length === 1 ? groupLabel(sel[0]) : sel.length + ' groups selected')) + ' ▾';
 }
 
 function groupRank(label) {
@@ -2768,7 +2773,7 @@ function buildFilterSidebar() {
     groupWrap.style.display = '';
     document.getElementById('filter-groups').innerHTML =
       Object.entries(groupCounts).sort((a,b)=> groupRank(a[0]) - groupRank(b[0]) || a[0].localeCompare(b[0]))
-        .map(([g,c]) => `<label class="fopt"><input type="checkbox" name="f-group" value="${g}" ${checkedGroups.indexOf(g)!==-1?'checked':''} onchange="renderProducts()"> ${g}<span class="fopt-count">${c}</span></label>`)
+        .map(([g,c]) => `<label class="fopt"><input type="checkbox" name="f-group" value="${g}" ${checkedGroups.indexOf(g)!==-1?'checked':''} onchange="renderProducts()"> ${isNewArrival(g) ? '<span class="new-arr-tag">✨ New Arrival</span>' : g}<span class="fopt-count">${c}</span></label>`)
         .join('');
   } else {
     groupWrap.style.display = 'none'; groupLbl.style.display = 'none';
@@ -3110,7 +3115,7 @@ function cardHTML(p) {
   let buyLine = '';
   if (groupOf(p) || p.lp) {
     buyLine = '<div class="pcard-buy">'
-      + (groupOf(p) ? '<span class="pcard-buy-grp">' + groupOf(p) + '</span>' : '')
+      + (groupOf(p) ? '<span class="pcard-buy-grp' + (isNewArrival(groupOf(p)) ? ' new-arr' : '') + '">' + (isNewArrival(groupOf(p)) ? '✨ ' : '') + groupLabel(groupOf(p)) + '</span>' : '')
       + (p.lp
           ? '<span>Last bought <b>' + fmtDMY(p.lp.d) + '</b>' + (p.lp.q ? ' · ' + p.lp.q + ' pcs' : '') + '</span>'
           : '<span class="pcard-buy-none">No purchase on record</span>')
@@ -3827,7 +3832,7 @@ function exportCatalogExcel() {
   var rows = [header];
   items.forEach(function(p){
     var row = [p.cat, p.sku];
-    if (showGroup) row.push(groupOf(p));
+    if (showGroup) row.push(groupLabel(groupOf(p)));
     if (showLastBuy) row.push(p.lp ? fmtDMY(p.lp.d) : '', p.lp ? p.lp.q : '');
     if (showIncoming) {
       var incX = incomingInfo(p);
