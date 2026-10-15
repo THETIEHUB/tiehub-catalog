@@ -3830,15 +3830,11 @@ function exportCatalogExcel() {
   var items = getExportItems();
   if (!items.length) { alert('No products to export. Adjust your filters.'); return; }
 
-  var showGroup = items.some(function(p){ return groupOf(p); }); // present for any logged-in employee
-  var showLastBuy = items.some(function(p){ return p.lp; });
-  var showIncoming = items.some(function(p){ return incomingInfo(p); });
+  // The Excel is something that gets sent to customers, so it keeps the original
+  // layout: no group / last-bought / incoming columns (those are on-screen only).
   var showLoc = items.some(function(p){ return p.loc; }); // present once the 4 location columns exist in the Products sheet
   var LOC_KEYS = ['Amrut Niwas', 'Chennai Store', 'Juhu Store', 'Kalaghoda Store'];
   var header = ['Category', 'SKU'];
-  if (showGroup) header.push('Group');
-  if (showLastBuy) header.push('Last Purchased', 'Last Purchase Qty');
-  if (showIncoming) header.push('Incoming Qty', 'Incoming By', 'Overdue Qty');
   header.push('Qty Available');
   if (showLoc) header = header.concat(LOC_KEYS);
   header.push('Image');
@@ -3846,12 +3842,6 @@ function exportCatalogExcel() {
   var rows = [header];
   items.forEach(function(p){
     var row = [p.cat, p.sku];
-    if (showGroup) row.push(groupLabel(groupOf(p)));
-    if (showLastBuy) row.push(p.lp ? fmtDMY(p.lp.d) : '', p.lp ? p.lp.q : '');
-    if (showIncoming) {
-      var incX = incomingInfo(p);
-      row.push(incX ? incX.onQty : '', incX && incX.eta ? fmtDMY(incX.eta) : '', incX ? incX.odQty : '');
-    }
     row.push(totalAvail(p));
     if (showLoc) LOC_KEYS.forEach(function(k){ row.push(p.loc ? (p.loc[k] || 0) : ''); });
     row.push(p.img || '');
