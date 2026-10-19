@@ -1318,6 +1318,11 @@ body{background:var(--cream);color:var(--text);font-family:var(--f-body);min-hei
         <option value="all">Any</option>
         <option value="yes">Has incoming stock</option>
       </select></span>
+    <span class="tb-pair" id="loc-tb-pair" style="display:none"><span class="flbl">Stock at:</span>
+      <div class="tb-dd" id="loc-tb">
+        <button class="fsel" id="loc-tb-btn" type="button" onclick="toggleLocDD(event)">All locations ▾</button>
+        <div class="tb-dd-pop" id="filter-locs" style="display:none" onclick="event.stopPropagation()"></div>
+      </div></span>
     <span class="flbl">View:</span>
     <div class="gridcols-toggle" id="gridcols-toggle">
       <button onclick="setGridCols(1)" data-cols="1" title="1 per row">▌</button>
@@ -2592,7 +2597,66 @@ function shareFilteredOnWhatsApp() {
 }
 
 // Raw material / made-to-order helpers
-function readyStock(p) { return Math.max(0, Math.floor(Number(p.stock) || 0)); }
+// ===== STOCK AT SELECTED LOCATIONS (staff) =====
+// LOC_SEL = null (all locations) or an array of location names. When a subset
+// is picked, a product's ready stock is the sum of just those locations, so
+// the stock line, Min Stock filter, exports and the lookbook all follow it.
+var LOC_NAMES = ['Amrut Niwas', 'Chennai Store', 'Juhu Store', 'Kalaghoda Store'];
+var LOC_ABBR_ALL = {'Amrut Niwas':'AN','Chennai Store':'Chennai','Juhu Store':'Juhu','Kalaghoda Store':'Kalaghoda'};
+var LOC_SEL = null;
+function readyStock(p) {
+  if (LOC_SEL && p.loc) {
+    var t = 0;
+    LOC_SEL.forEach(function(k){ t += Number(p.loc[k]) || 0; });
+    return Math.max(0, Math.floor(t));
+  }
+  return Math.max(0, Math.floor(Number(p.stock) || 0));
+}
+function toggleLocDD(ev) {
+  ev.stopPropagation();
+  var pop = document.getElementById('filter-locs');
+  pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', function() {
+  var pop = document.getElementById('filter-locs');
+  if (pop) pop.style.display = 'none';
+});
+function readLocSel() {
+  var on = Array.from(document.querySelectorAll('input[name="f-loc"]:checked')).map(function(i){ return i.value; });
+  var total = document.querySelectorAll('input[name="f-loc"]').length;
+  LOC_SEL = (on.length === 0 || on.length === total) ? null : on;
+}
+function onLocChange() { readLocSel(); renderProducts(); }
+function toggleAllLocs(on) {
+  document.querySelectorAll('input[name="f-loc"]').forEach(function(cb){ cb.checked = on; });
+  onLocChange();
+}
+function updateLocBtn() {
+  var btn = document.getElementById('loc-tb-btn');
+  if (!btn) return;
+  var all = document.getElementById('loc-all');
+  var boxes = document.querySelectorAll('input[name="f-loc"]');
+  var on = document.querySelectorAll('input[name="f-loc"]:checked').length;
+  if (all) { all.checked = boxes.length > 0 && on === boxes.length; all.indeterminate = on > 0 && on < boxes.length; }
+  btn.textContent = (!LOC_SEL ? 'All locations' : (LOC_SEL.length === 1 ? LOC_ABBR_ALL[LOC_SEL[0]] : LOC_SEL.length + ' locations')) + ' ▾';
+}
+function buildLocFilter(inCat) {
+  var pair = document.getElementById('loc-tb-pair');
+  if (!pair) return;
+  var staff = (typeof EMP_PROFILE !== 'undefined') && EMP_PROFILE;
+  var hasLoc = inCat.some(function(p){ return p.loc; });
+  if (!staff || !hasLoc) { pair.style.display = 'none'; return; }
+  pair.style.display = '';
+  var checked = Array.from(document.querySelectorAll('input[name="f-loc"]:checked')).map(function(i){ return i.value; });
+  var pop = document.getElementById('filter-locs');
+  pop.innerHTML = '<label class="fopt fopt-all"><input type="checkbox" id="loc-all" onchange="toggleAllLocs(this.checked)"> <b>Select all</b></label>'
+    + LOC_NAMES.map(function(k) {
+        var n = inCat.filter(function(p){ return p.loc && (Number(p.loc[k]) || 0) > 0; }).length;
+        return '<label class="fopt"><input type="checkbox" name="f-loc" value="' + k + '"' + (checked.indexOf(k) !== -1 ? ' checked' : '') + ' onchange="onLocChange()"> ' + k + '<span class="fopt-count">' + n + '</span></label>';
+      }).join('');
+  readLocSel();
+  updateLocBtn();
+}
 function rawStock(p) { return Math.max(0, Math.floor(Number(p.raw) || 0)); }
 function totalAvail(p) { return readyStock(p) + rawStock(p); }
 function getPriceRange(p) {
@@ -2613,6 +2677,9 @@ function getFiltered() {
       return skuClean.includes(q) || p.sku.toLowerCase().includes(searchQ.toLowerCase()) || catClean.includes(q);
     });
   }
+  // Location filter: with a subset of locations chosen, drop products that have
+  // nothing at those locations (made-to-order capacity still counts).
+  if (LOC_SEL) list = list.filter(p => !p.loc || totalAvail(p) > 0);
   // Stock filter — uses TOTAL available (ready + made-to-order)
   const sf = document.getElementById('stock-sel')?.value || 'all';
   if (sf === 'in') {
@@ -2807,6 +2874,8 @@ function buildFilterSidebar() {
     }
   }
 
+  buildLocFilter(inCat);
+
   // Show Sale Price filter ONLY if the backend actually sent this data —
   // same restricted attribute as Product Group. A simple "On Sale" toggle
   // instead of a range slider, since only a handful of products typically
@@ -2854,6 +2923,7 @@ function buildFilterSidebar() {
 function clearFilters() {
   document.querySelectorAll('.filter-sidebar input[type="checkbox"], #filter-groups input[type="checkbox"]').forEach(cb => cb.checked = false);
   var incReset = document.getElementById('incoming-sel'); if (incReset) incReset.value = 'all';
+  document.querySelectorAll('input[name="f-loc"]').forEach(function(cb){ cb.checked = false; }); readLocSel();
   resetPriceSlider();
   renderProducts();
 }
@@ -3037,7 +3107,12 @@ function renderActiveFilters() {
   if (incChipSel && incChipSel.value === 'yes') {
     chips.push({type:'incoming', value:'on', label:'Incoming stock', reset: function(){ incChipSel.value = 'all'; }});
   }
+  if (LOC_SEL) {
+    chips.push({type:'loc', value:'on', label:'Stock at: ' + LOC_SEL.map(function(k){ return LOC_ABBR_ALL[k]; }).join(', '), reset: function(){
+      document.querySelectorAll('input[name="f-loc"]').forEach(function(cb){ cb.checked = false; }); readLocSel(); }});
+  }
   updateGroupBtn();
+  updateLocBtn();
   document.querySelectorAll('input[name="f-size"]:checked').forEach(cb => {
     chips.push({type:'size', value:cb.value, label:cb.value, el:cb});
   });
@@ -3120,7 +3195,7 @@ function cardHTML(p) {
   // Code.gs). Purely informational, doesn't affect ordering/availability.
   const LOC_ABBR = {'Amrut Niwas':'AN','Chennai Store':'Chennai','Juhu Store':'Juhu','Kalaghoda Store':'Kalaghoda'};
   const locLine = p.loc
-    ? `<div class="pcard-loc">${Object.keys(p.loc).map(k => `${LOC_ABBR[k]||k} ${p.loc[k]}`).join(' · ')}</div>`
+    ? `<div class="pcard-loc">${Object.keys(p.loc).filter(k => !LOC_SEL || LOC_SEL.indexOf(k) !== -1).map(k => `${LOC_ABBR[k]||k} ${p.loc[k]}`).join(' · ')}</div>`
     : '';
 
   // Employee-only purchase info (p.fg / p.lp / p.up are never sent to
@@ -3833,7 +3908,7 @@ function exportCatalogExcel() {
   // The Excel is something that gets sent to customers, so it keeps the original
   // layout: no group / last-bought / incoming columns (those are on-screen only).
   var showLoc = items.some(function(p){ return p.loc; }); // present once the 4 location columns exist in the Products sheet
-  var LOC_KEYS = ['Amrut Niwas', 'Chennai Store', 'Juhu Store', 'Kalaghoda Store'];
+  var LOC_KEYS = LOC_SEL ? LOC_SEL.slice() : ['Amrut Niwas', 'Chennai Store', 'Juhu Store', 'Kalaghoda Store'];
   var header = ['Category', 'SKU'];
   header.push('Qty Available');
   if (showLoc) header = header.concat(LOC_KEYS);
