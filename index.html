@@ -7860,6 +7860,7 @@ function revalidateKeptEmployee(profile) {
     if (ls) ls.style.display = 'none';
     showEmpDashboard(empProfile);
     if (restoredFromKeep) revalidateKeptEmployee(empProfile);
+    setTimeout(kickPurchaseRefresh, 4000); // employees stay signed in, so this must run on every open, not just on login
     // No separate product refresh needed here — checkAuth runs before
     // loadDataFromBackend's DOMContentLoaded handler, so EMP_PROFILE is
     // already set by the time that fetch fires and picks this up itself.
@@ -8111,6 +8112,21 @@ function loadDataFromBackend() {
 // very first page load, before anyone's logged in, EMP_PROFILE doesn't
 // exist yet, so that initial fetch never carries this data even for
 // allowed staff. This is the catch-up call that fixes that.
+// Asks the server to recompute the purchase columns if they are older than the
+// refresh interval (it ignores the call when they are fresh). If it did
+// recompute, reload the product list once so the new last-bought / incoming
+// numbers show without waiting for the next visit.
+function kickPurchaseRefresh() {
+  if (!EMP_PROFILE || !EMP_PROFILE.name) return;
+  fetch(BACKEND_URL + '?action=refresh_purchase_data_if_stale&_t=' + encodeURIComponent(BACKEND_TOKEN)
+    + '&emp_name=' + encodeURIComponent(EMP_PROFILE.name)
+    + '&emp_id=' + encodeURIComponent(EMP_PROFILE.emp_id || ''))
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d && d.refreshed) refreshProductsForEmployee();
+    }).catch(function(){});
+}
+
 function refreshProductsForEmployee() {
   if (!EMP_PROFILE || !EMP_PROFILE.name) return;
   // Keep latest-purchase / final-group / incoming-stock columns in step with
