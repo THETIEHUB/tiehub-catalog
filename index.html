@@ -1767,6 +1767,15 @@ function getExportItems() {
   return selected;
 }
 
+// PDF catalog / Lookbook only: products with no image (or no usable image URL)
+// are left out entirely, so a customer never gets a page with an empty photo.
+// (Excel keeps every product - it just lists the image link.)
+function getPdfItems() {
+  return getExportItems().filter(function(p) {
+    return p.img && /^https?:\/\//i.test(String(p.img).trim());
+  });
+}
+
 // Shows/hides the small "N selected · Clear" indicator in the toolbar.
 function updateSelectionBar() {
   var bar = document.getElementById('selection-bar');
@@ -3526,24 +3535,11 @@ async function exportCatalogLookbook(perPage) {
     return;
   }
 
-  var items = getExportItems();  // uses ticked selection if any, else respects current filters + sort
-  if (!items.length) { win.close(); alert('No products to show. Adjust your filters.'); return; }
+  var items = getPdfItems();  // ticked selection if any, else current filters + sort - products without a photo are left out
+  if (!items.length) { win.close(); alert('No products with photos to show. Adjust your filters.'); return; }
 
   var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
   var today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
-
-  // ---- Pre-flight check: warn if photos are missing before generating ----
-  var missingPhotoItems = items.filter(function(p){ return !p.img; });
-  if (missingPhotoItems.length) {
-    var proceed = confirm(
-      missingPhotoItems.length + ' of ' + items.length + ' product(s) have no photo and will show as '
-      + '"Image Coming Soon" in the lookbook:\n\n'
-      + missingPhotoItems.slice(0, 8).map(function(p){ return '• ' + p.sku; }).join('\n')
-      + (missingPhotoItems.length > 8 ? '\n…and ' + (missingPhotoItems.length - 8) + ' more' : '')
-      + '\n\nContinue anyway?'
-    );
-    if (!proceed) { win.close(); return; }
-  }
 
   // Only the hero (1-per-page) layout has room for a description, so only
   // bother fetching it then — a live lookup against Final_Data for just
@@ -3976,8 +3972,8 @@ function exportCatalogPDF(perPage) {
     return;
   }
 
-  var items = getExportItems();  // uses ticked selection if any, else respects current filters + sort
-  if (!items.length) { win.close(); alert('No products to export. Adjust your filters.'); return; }
+  var items = getPdfItems();  // ticked selection if any, else current filters + sort - products without a photo are left out
+  if (!items.length) { win.close(); alert('No products with photos to export. Adjust your filters.'); return; }
 
   // Build active filter description for the header
   var filterDesc = [];
