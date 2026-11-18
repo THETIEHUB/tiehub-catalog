@@ -1776,47 +1776,6 @@ function getPdfItems() {
   });
 }
 
-// A link that exists can still be dead (deleted / blocked file). Before the PDF
-// or Lookbook is built, every photo is really loaded once; products whose photo
-// fails or times out are left out. Results are remembered for the session, and
-// the browser keeps the downloaded photos, so the PDF window reuses them.
-var IMG_LOAD_OK = {};
-function checkImageLoads(url, timeoutMs) {
-  return new Promise(function(resolve) {
-    if (IMG_LOAD_OK.hasOwnProperty(url)) { resolve(IMG_LOAD_OK[url]); return; }
-    var img = new Image(), done = false;
-    function finish(ok) { if (done) return; done = true; IMG_LOAD_OK[url] = ok; resolve(ok); }
-    img.onload = function() { finish(img.naturalWidth > 1 && img.naturalHeight > 1); };
-    img.onerror = function() { finish(false); };
-    setTimeout(function() { finish(false); }, timeoutMs || 15000);
-    img.src = url;
-  });
-}
-async function onlyLoadablePhotos(items, win, label) {
-  var total = items.length, checked = 0, ok = new Array(total);
-  function say() {
-    try {
-      win.document.open();
-      win.document.write('<!doctype html><title>Preparing ' + label + '</title><body style="font-family:sans-serif;background:#FAF6EF;color:#1A1610;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><div style="font-size:20px;margin-bottom:10px">Checking photos&hellip;</div><div style="font-size:14px;color:#8B6F1F">' + checked + ' of ' + total + '</div></div></body>');
-      win.document.close();
-    } catch (e) {}
-  }
-  say();
-  var next = 0, lastSay = 0;
-  async function worker() {
-    while (next < total) {
-      var i = next++;
-      ok[i] = await checkImageLoads(String(items[i].img).trim(), 15000);
-      checked++;
-      if (checked - lastSay >= 25) { lastSay = checked; say(); }
-    }
-  }
-  var workers = [];
-  for (var w = 0; w < 24; w++) workers.push(worker());
-  await Promise.all(workers);
-  return items.filter(function(p, i) { return ok[i]; });
-}
-
 // Shows/hides the small "N selected · Clear" indicator in the toolbar.
 function updateSelectionBar() {
   var bar = document.getElementById('selection-bar');
@@ -3577,7 +3536,6 @@ async function exportCatalogLookbook(perPage) {
   }
 
   var items = getPdfItems();  // ticked selection if any, else current filters + sort - products without a photo are left out
-  if (items.length) items = await onlyLoadablePhotos(items, win, 'Lookbook');  // ...and so are photos that do not load
   if (!items.length) { win.close(); alert('No products with photos to show. Adjust your filters.'); return; }
 
   var catName = activeCat === 'ALL' ? 'All Collections' : activeCat;
@@ -4001,7 +3959,7 @@ function toggleDownloadDropdown(e) {
   }
 }
 
-async function exportCatalogPDF(perPage) {
+function exportCatalogPDF(perPage) {
   perPage = [1,2,3,4,5].includes(perPage) ? perPage : 4;
   var optionsModal = document.getElementById('lookbook-options-modal');
   if (optionsModal) optionsModal.remove();
@@ -4015,7 +3973,6 @@ async function exportCatalogPDF(perPage) {
   }
 
   var items = getPdfItems();  // ticked selection if any, else current filters + sort - products without a photo are left out
-  if (items.length) items = await onlyLoadablePhotos(items, win, 'PDF');  // ...and so are photos that do not load
   if (!items.length) { win.close(); alert('No products with photos to export. Adjust your filters.'); return; }
 
   // Build active filter description for the header
